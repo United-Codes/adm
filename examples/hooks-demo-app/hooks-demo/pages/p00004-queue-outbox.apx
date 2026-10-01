@@ -1,0 +1,692 @@
+page 4 (
+    name: Queue & Outbox
+    alias: QUEUE-OUTBOX
+    title: Queue & Outbox
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: What you are looking at
+        type: staticContent
+        source {
+            htmlCode:
+                ```html
+                <p>This is the hand-over point between the hook and the worker. The <strong>event queue</strong> is an Oracle Advanced Queuing queue; the report reads its queue table directly.</p>
+                <ul>
+                  <li><strong>READY</strong>: waiting for a worker. <strong>WAIT</strong>: delayed, a failed message waiting out its retry delay. <strong>PROCESSED</strong>: handled and kept for a day so you can see it. <strong>EXPIRED</strong> in the exception queue: failed three times, parked there. Use <em>Requeue</em> from its action menu once the cause is fixed.</li>
+                  <li>The <strong>outbox</strong> is what the version digest would have sent. The workflow only records it; sending is somebody else's job.</li>
+                  <li><strong>Refused uploads</strong> were stopped synchronously by the guard inside the hook. Nothing of them was stored, this log is the only trace.</li>
+                </ul>
+                <p><a href="f?p=&APP_ID.:CODE:&SESSION.">Read the code behind it</a> (steps 5 to 7).</p>
+                ```
+        }
+        layout {
+            sequence: 5
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region outbox (
+        name: Outbox: notifications the version digest wrote
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select n.created_at
+                     , n.recipient
+                     , n.subject
+                     , n.body
+                  from hkd_notifications n
+                 order by n.notification_id desc
+                ```
+        }
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 107090634809786760
+        }
+
+        column BODY (
+            type: plainText
+            heading {
+                heading: Body
+            }
+            layout {
+                sequence: 40
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: D
+            }
+        )
+
+        column CREATED_AT (
+            type: plainText
+            heading {
+                heading: Created
+            }
+            layout {
+                sequence: 10
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        column RECIPIENT (
+            type: plainText
+            heading {
+                heading: Recipient
+            }
+            layout {
+                sequence: 20
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        column SUBJECT (
+            type: plainText
+            heading {
+                heading: Subject
+            }
+            layout {
+                sequence: 30
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+    )
+
+    region queue (
+        name: Event queue (AQ$HKD_EVENT_QT)
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select case q.queue
+                         when 'HKD_EVENT_Q' then 'Main queue'
+                         else 'Exception queue'
+                       end as queue_name
+                     , q.msg_state
+                     , q.user_data.hook_key as hook_key
+                     , coalesce(q.user_data.document_id, q.user_data.folder_id) as object_id
+                     , q.user_data.actor as actor
+                     , q.retry_count
+                     , q.enq_timestamp
+                     , q.deq_timestamp
+                     , rawtohex(q.msg_id) as msg_id
+                     , null as actions
+                  from aq$hkd_event_qt q
+                 order by q.enq_timestamp desc
+                ```
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 107089075647786757
+        }
+
+        column ACTIONS (
+            type: themeTemplateComponent/actions
+            heading {
+                heading: Actions
+            }
+            layout {
+                sequence: 100
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: J
+            }
+
+            action actions-menu (
+                position: actions
+                template: menu
+                label: Actions Menu
+                layout {
+                    sequence: 10
+                }
+                appearance {
+                    displayType: icon
+                    icon: fa-navicon
+                }
+
+                menu requeue (
+                    label: Requeue
+                    layout {
+                        sequence: 10
+                    }
+                    behavior {
+                        type: triggerAction
+                    }
+                    serverSideCondition {
+                        type: item=value
+                        item: QUEUE_NAME
+                        value: Exception queue
+                    }
+
+                    triggerAction native-execute-plsql-code (
+                        action: executeServerSideCode
+                        settings {
+                            plsqlCode:
+                                ```plsql
+                                begin
+                                    hkd_worker_api.requeue_failed(hextoraw(:MSG_ID));
+                                end;
+                                ```
+                            itemsToSubmit: MSG_ID
+                        }
+                        execution {
+                            sequence: 10
+                        }
+                    )
+
+                    triggerAction native-refresh (
+                        action: refresh
+                        affectedElements {
+                            selectionType: region
+                            region: @queue
+                        }
+                        execution {
+                            sequence: 20
+                        }
+                    )
+
+                )
+
+            )
+
+        )
+
+        column ACTOR (
+            type: plainText
+            heading {
+                heading: Actor
+            }
+            layout {
+                sequence: 50
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: E
+            }
+        )
+
+        column DEQ_TIMESTAMP (
+            type: plainText
+            heading {
+                heading: Dequeued
+            }
+            layout {
+                sequence: 80
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: H
+            }
+        )
+
+        column ENQ_TIMESTAMP (
+            type: plainText
+            heading {
+                heading: Enqueued
+            }
+            layout {
+                sequence: 70
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: G
+            }
+        )
+
+        column HOOK_KEY (
+            type: plainText
+            heading {
+                heading: Event
+            }
+            layout {
+                sequence: 30
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        column MSG_ID (
+            type: plainText
+            heading {
+                heading: Message id
+            }
+            layout {
+                sequence: 90
+            }
+            source {
+                primaryKey: true
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: I
+            }
+        )
+
+        column MSG_STATE (
+            type: plainText
+            heading {
+                heading: State
+            }
+            layout {
+                sequence: 20
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        column OBJECT_ID (
+            type: plainText
+            heading {
+                heading: Document / Folder id
+            }
+            layout {
+                sequence: 40
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: D
+            }
+        )
+
+        column QUEUE_NAME (
+            type: plainText
+            heading {
+                heading: Queue
+            }
+            layout {
+                sequence: 10
+            }
+            source {
+                dataType: STRING
+                availableOnClient: true
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        column RETRY_COUNT (
+            type: plainText
+            heading {
+                heading: Retries
+            }
+            layout {
+                sequence: 60
+            }
+            source {
+                dataType: NUMBER
+            }
+            advanced {
+                endUserAlias: F
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+    )
+
+    region refused (
+        name: Refused uploads: written by the guard hook
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select r.rejected_at
+                     , r.hook_key
+                     , r.subject
+                     , r.reason
+                     , r.rejected_by
+                  from hkd_rejections r
+                 order by r.rejection_id desc
+                ```
+        }
+        layout {
+            sequence: 30
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 107091286664786760
+        }
+
+        column HOOK_KEY (
+            type: plainText
+            heading {
+                heading: Event
+            }
+            layout {
+                sequence: 20
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        column REASON (
+            type: plainText
+            heading {
+                heading: Reason
+            }
+            layout {
+                sequence: 40
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: D
+            }
+        )
+
+        column REJECTED_AT (
+            type: plainText
+            heading {
+                heading: Refused
+            }
+            layout {
+                sequence: 10
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        column REJECTED_BY (
+            type: plainText
+            heading {
+                heading: By
+            }
+            layout {
+                sequence: 50
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: E
+            }
+        )
+
+        column SUBJECT (
+            type: plainText
+            heading {
+                heading: File
+            }
+            layout {
+                sequence: 30
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+    )
+
+    button process-now (
+        buttonName: PROCESS_NOW
+        label: Process queue now
+        layout {
+            sequence: 20
+            region: @queue
+            slot: copy
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+            icon: fa-play
+        }
+        behavior {
+            action: definedByDynamicAction
+        }
+    )
+
+    button refresh (
+        buttonName: REFRESH
+        label: Refresh
+        layout {
+            sequence: 10
+            region: @queue
+            slot: copy
+        }
+        appearance {
+            buttonTemplate: @/text
+            templateOptions: #DEFAULT#
+            icon: fa-refresh
+        }
+        behavior {
+            action: definedByDynamicAction
+        }
+    )
+
+    dynamicAction process-queue-now (
+        name: Process queue now
+        execution {
+            sequence: 20
+        }
+        when {
+            event: click
+            selectionType: button
+            button: @process-now
+        }
+
+        action native-execute-plsql-code (
+            action: executeServerSideCode
+            settings {
+                plsqlCode:
+                    ```plsql
+                    begin
+                        hkd_demo_api.process_now;
+                    end;
+                    ```
+                showProcessing: true
+            }
+            execution {
+                sequence: 10
+                fireOnInit: false
+            }
+        )
+
+        action native-refresh-outbox (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @outbox
+            }
+            execution {
+                sequence: 30
+                fireOnInit: false
+            }
+        )
+
+        action native-refresh-queue (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @queue
+            }
+            execution {
+                sequence: 20
+                fireOnInit: false
+            }
+        )
+
+    )
+
+    dynamicAction refresh-all (
+        name: Refresh
+        execution {
+            sequence: 10
+        }
+        when {
+            event: click
+            selectionType: button
+            button: @refresh
+        }
+
+        action native-refresh-outbox (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @outbox
+            }
+            execution {
+                sequence: 20
+                fireOnInit: false
+            }
+        )
+
+        action native-refresh-queue (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @queue
+            }
+            execution {
+                sequence: 10
+                fireOnInit: false
+            }
+        )
+
+        action native-refresh-refused (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @refused
+            }
+            execution {
+                sequence: 30
+                fireOnInit: false
+            }
+        )
+
+    )
+
+)
+

@@ -1,0 +1,401 @@
+page 3 (
+    name: Workflow Results
+    alias: WORKFLOW-RESULTS
+    title: Workflow Results
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: What you are looking at
+        type: staticContent
+        source {
+            htmlCode:
+                ```html
+                <p>Each row is one <strong>workflow</strong> that the worker ran for one event. The worker takes the message from the queue <em>after</em> the upload committed, so a failure here never affected the upload.</p>
+                <ul>
+                  <li><strong>OK</strong>: it ran and found nothing special. <strong>Flagged</strong>: it ran and found something worth a look (a duplicate, a large file, a version that shrank). <strong>Skipped</strong>: the event was not one it applies to.</li>
+                  <li><strong>Failed</strong> rows with the workflow "Worker: delivery failed" are rolled-back attempts. The queue redelivers the message; <em>Attempt</em> counts the deliveries.</li>
+                  <li>The second report shows what the workflows wrote <strong>into ADM itself</strong>, through ADM's tag API. Those tags are visible in ADM's own UI.</li>
+                </ul>
+                <p><a href="f?p=&APP_ID.:CODE:&SESSION.">Read the code behind it</a> (steps 6 to 11).</p>
+                ```
+        }
+        layout {
+            sequence: 5
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region runs (
+        name: Workflow runs
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select r.run_id
+                     , r.processed_at
+                     , coalesce(w.name, 'Worker: delivery failed') as workflow
+                     , r.subject
+                     , case r.status
+                         when 'OK' then '<span class="fa fa-check-circle u-success-text" aria-hidden="true"></span> OK'
+                         when 'FLAGGED' then '<span class="fa fa-flag u-warning-text" aria-hidden="true"></span> Flagged'
+                         when 'FAILED' then '<span class="fa fa-times-circle u-danger-text" aria-hidden="true"></span> Failed'
+                         else '<span class="fa fa-minus-circle u-color-9-text" aria-hidden="true"></span> Skipped'
+                       end as status
+                     , r.summary
+                     , r.actor
+                     , r.attempt
+                  from hkd_workflow_runs r
+                  left join hkd_workflows w
+                    on w.workflow_code = r.workflow_code
+                 order by r.run_id desc
+                ```
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 107086997979786752
+        }
+
+        column ACTOR (
+            type: plainText
+            heading {
+                heading: Triggered by
+            }
+            layout {
+                sequence: 70
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: G
+            }
+        )
+
+        column ATTEMPT (
+            type: plainText
+            heading {
+                heading: Attempt
+            }
+            layout {
+                sequence: 80
+            }
+            source {
+                dataType: NUMBER
+            }
+            advanced {
+                endUserAlias: H
+            }
+        )
+
+        column PROCESSED_AT (
+            type: plainText
+            heading {
+                heading: Processed
+            }
+            layout {
+                sequence: 20
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        column RUN_ID (
+            type: plainText
+            heading {
+                heading: Run
+            }
+            layout {
+                sequence: 10
+            }
+            source {
+                primaryKey: true
+                dataType: NUMBER
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        column STATUS (
+            type: plainText
+            heading {
+                heading: Status
+            }
+            layout {
+                sequence: 50
+            }
+            columnFormatting {
+                htmlExpression: #STATUS#
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: E
+            }
+            security {
+                escapeSpecialChars: false
+            }
+        )
+
+        column SUBJECT (
+            type: plainText
+            heading {
+                heading: Document / Folder
+            }
+            layout {
+                sequence: 40
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: D
+            }
+        )
+
+        column SUMMARY (
+            type: plainText
+            heading {
+                heading: What happened
+            }
+            layout {
+                sequence: 60
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: F
+            }
+        )
+
+        column WORKFLOW (
+            type: plainText
+            heading {
+                heading: Workflow
+            }
+            layout {
+                sequence: 30
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+    )
+
+    region tags (
+        name: Tags the workflows wrote into ADM
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select d.document_name
+                     , t.tag_name
+                     , t.tag_value
+                     , t.created_date
+                  from adm_my_document_tags_v t
+                  join adm_my_documents_v d
+                    on d.document_id = t.document_id
+                 where t.tag_name in ('category', 'needs-review', 'duplicate-of', 'large-file')
+                 order by t.created_date desc
+                 fetch first 100 rows only
+                ```
+        }
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 107087944922786756
+        }
+
+        column CREATED_DATE (
+            type: plainText
+            heading {
+                heading: Tagged
+            }
+            layout {
+                sequence: 40
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: D
+            }
+        )
+
+        column DOCUMENT_NAME (
+            type: plainText
+            heading {
+                heading: Document
+            }
+            layout {
+                sequence: 10
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        column TAG_NAME (
+            type: plainText
+            heading {
+                heading: Tag
+            }
+            layout {
+                sequence: 20
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        column TAG_VALUE (
+            type: plainText
+            heading {
+                heading: Value
+            }
+            layout {
+                sequence: 30
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+    )
+
+    button refresh (
+        buttonName: REFRESH
+        label: Refresh
+        layout {
+            sequence: 10
+            region: @runs
+            slot: copy
+        }
+        appearance {
+            buttonTemplate: @/text
+            templateOptions: #DEFAULT#
+            icon: fa-refresh
+        }
+        behavior {
+            action: definedByDynamicAction
+        }
+    )
+
+    dynamicAction refresh-results (
+        name: Refresh results
+        execution {
+            sequence: 10
+        }
+        when {
+            event: click
+            selectionType: button
+            button: @refresh
+        }
+
+        action native-refresh-runs (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @runs
+            }
+            execution {
+                sequence: 10
+                fireOnInit: false
+            }
+        )
+
+        action native-refresh-tags (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @tags
+            }
+            execution {
+                sequence: 20
+                fireOnInit: false
+            }
+        )
+
+    )
+
+)
+

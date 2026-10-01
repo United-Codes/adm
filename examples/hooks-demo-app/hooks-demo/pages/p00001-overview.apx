@@ -1,0 +1,266 @@
+page 1 (
+    name: Overview
+    alias: OVERVIEW
+    title: ADM Hooks Demo
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region how-it-works (
+        name: How it works
+        type: staticContent
+        source {
+            htmlCode:
+                ```html
+                    <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:stretch">
+                    <div style="flex:1 1 11rem;min-width:11rem;border:1px solid var(--a-region-border-color,#d4d4d4);border-top:4px solid #5b8def;border-radius:6px;padding:.75rem 1rem">
+                      <div style="font-weight:600;margin-bottom:.25rem">1. Upload or new folder</div>
+                      <div style="font-size:.9em;opacity:.85">Any caller of ADM's API: this app, a batch job, a REST service. The hook does not care.</div>
+                    </div>
+                    <div style="align-self:center;font-size:1.5rem;opacity:.5" aria-hidden="true">&rarr;</div>
+                    <div style="flex:1 1 11rem;min-width:11rem;border:1px solid var(--a-region-border-color,#d4d4d4);border-top:4px solid #e0922f;border-radius:6px;padding:.75rem 1rem">
+                      <div style="font-weight:600;margin-bottom:.25rem">2. Hook (synchronous)</div>
+                      <div style="font-size:.9em;opacity:.85">Runs <strong>inside the caller's transaction</strong>. A cheap guard may refuse the operation. Then it enqueues one message and returns.</div>
+                    </div>
+                    <div style="align-self:center;font-size:1.5rem;opacity:.5" aria-hidden="true">&rarr;</div>
+                    <div style="flex:1 1 11rem;min-width:11rem;border:1px solid var(--a-region-border-color,#d4d4d4);border-top:4px solid #8a5cd6;border-radius:6px;padding:.75rem 1rem">
+                      <div style="font-weight:600;margin-bottom:.25rem">3. AQ queue</div>
+                      <div style="font-size:.9em;opacity:.85">The message becomes visible only when the upload <strong>commits</strong>. A rollback takes it back. Retries and an exception queue are built in.</div>
+                    </div>
+                    <div style="align-self:center;font-size:1.5rem;opacity:.5" aria-hidden="true">&rarr;</div>
+                    <div style="flex:1 1 11rem;min-width:11rem;border:1px solid var(--a-region-border-color,#d4d4d4);border-top:4px solid #2f9e6e;border-radius:6px;padding:.75rem 1rem">
+                      <div style="font-weight:600;margin-bottom:.25rem">4. Worker (asynchronous)</div>
+                      <div style="font-size:.9em;opacity:.85">Own transaction, own session. Runs the enabled workflows. If it fails, the upload is untouched.</div>
+                    </div>
+                    <div style="align-self:center;font-size:1.5rem;opacity:.5" aria-hidden="true">&rarr;</div>
+                    <div style="flex:1 1 11rem;min-width:11rem;border:1px solid var(--a-region-border-color,#d4d4d4);border-top:4px solid #2f9e6e;border-radius:6px;padding:.75rem 1rem">
+                      <div style="font-weight:600;margin-bottom:.25rem">5. Results</div>
+                      <div style="font-size:.9em;opacity:.85">Tags and folders in ADM, a run log, an outbox. See the other pages.</div>
+                    </div>
+                    </div>
+                <h3 style="margin-top:1.5rem">Why not do the work in the hook?</h3>
+                <ul>
+                  <li><strong>Speed.</strong> The hook runs in the request that uploaded the file. Anything slow makes every upload slow.</li>
+                  <li><strong>Isolation.</strong> A hook that raises aborts the upload. That is right for a rule ("no .exe"), wrong for "tag it" or "send a mail".</li>
+                  <li><strong>Safety.</strong> A hook must never commit. A worker owns its transaction, so it can commit, retry and fail on its own.</li>
+                </ul>
+                <p><a href="f?p=&APP_ID.:CODE:&SESSION.">Read the hook and worker code behind this app</a>: it is shown live, step by step.</p>
+                ```
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region queue-glance (
+        name: Queue at a glance
+        type: classicReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select case q.queue
+                         when 'HKD_EVENT_Q' then 'Main queue'
+                         else 'Exception queue'
+                       end as queue_name
+                     , q.msg_state
+                     , count(*) as messages
+                     , max(q.enq_timestamp) as last_enqueued
+                  from aq$hkd_event_qt q
+                 group by q.queue
+                        , q.msg_state
+                 order by q.queue
+                        , q.msg_state
+                ```
+        }
+        layout {
+            sequence: 30
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        componentAppearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Report--stretch
+                t-Report--horizontalBorders
+            ]
+        }
+        pagination {
+            type: rowRangesXToYNoPagination
+        }
+        messages {
+            whenNoDataFound: Nothing here yet.
+        }
+
+        column LAST_ENQUEUED (
+            reportColumnQueryId: 4
+            derivedColumn: N
+            heading {
+                heading: Last enqueued
+            }
+            layout {
+                sequence: 40
+            }
+        )
+
+        column MESSAGES (
+            reportColumnQueryId: 3
+            derivedColumn: N
+            heading {
+                heading: Messages
+            }
+            layout {
+                sequence: 30
+            }
+        )
+
+        column MSG_STATE (
+            reportColumnQueryId: 2
+            derivedColumn: N
+            heading {
+                heading: State
+            }
+            layout {
+                sequence: 20
+            }
+        )
+
+        column QUEUE_NAME (
+            reportColumnQueryId: 1
+            derivedColumn: N
+            heading {
+                heading: Queue
+            }
+            layout {
+                sequence: 10
+            }
+        )
+
+    )
+
+    region registered-hooks (
+        name: Hooks registered in ADM (adm_hooks)
+        type: classicReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select h.hook_key
+                     , case when h.hook_plsql is null then 'not registered' else 'registered' end as status
+                     , h.hook_plsql
+                     , h.updated_by
+                     , h.updated_date
+                  from adm_hooks h
+                 order by h.hook_key
+                ```
+        }
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        componentAppearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Report--stretch
+                t-Report--horizontalBorders
+            ]
+        }
+        pagination {
+            type: rowRangesXToYNoPagination
+        }
+        messages {
+            whenNoDataFound: Nothing here yet.
+        }
+
+        column HOOK_KEY (
+            reportColumnQueryId: 1
+            derivedColumn: N
+            heading {
+                heading: Event
+            }
+            layout {
+                sequence: 10
+            }
+        )
+
+        column HOOK_PLSQL (
+            reportColumnQueryId: 3
+            derivedColumn: N
+            heading {
+                heading: Hook PL/SQL (what ADM executes)
+            }
+            layout {
+                sequence: 30
+            }
+        )
+
+        column STATUS (
+            reportColumnQueryId: 2
+            derivedColumn: N
+            heading {
+                heading: Status
+            }
+            layout {
+                sequence: 20
+            }
+        )
+
+        column UPDATED_BY (
+            reportColumnQueryId: 4
+            derivedColumn: N
+            heading {
+                heading: Registered by
+            }
+            layout {
+                sequence: 40
+            }
+        )
+
+        column UPDATED_DATE (
+            reportColumnQueryId: 5
+            derivedColumn: N
+            heading {
+                heading: Registered
+            }
+            layout {
+                sequence: 50
+            }
+        )
+
+    )
+
+)
+

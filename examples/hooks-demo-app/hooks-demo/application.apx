@@ -1,0 +1,68 @@
+app HOOKS-DEMO (
+    name: ADM Hooks Demo
+    logo {
+        type: text
+        text: ADM Hooks Demo
+    }
+    navigation {
+        homeUrl: {
+            page: 1
+        }
+        loginUrl: {
+            page: LOGIN
+        }
+    }
+    navigationMenu {
+        listTemplate: @/side-navigation-menu
+        templateOptions: [
+            #DEFAULT#
+            t-TreeNav--styleA
+            js-navCollapsed--hidden
+        ]
+        list: @navigation-menu
+    }
+    navigationBar {
+        list: @navigation-bar
+        listTemplate: @/navigation-bar
+        templateOptions: #DEFAULT#
+    }
+    userInterface {
+        currentTheme: @universal-theme
+        globalPage: 0
+        addBuiltWithApexToFooter: false
+    }
+    appFormatMasks {
+        date: DS
+        timestamp: DS
+        timestampTimeZone: DS
+    }
+    authentication {
+        scheme: @oracle-apex-accounts
+    }
+    authorization {
+        scheme: @has-adm-account
+    }
+    security {
+        runtimeApiUsage: modifyThisApp
+    }
+    sessionStateProtection {
+        checksumSalt: 2E64E71D2C4CAD40F265D2BA3CD4E848E3786CB43FD4F831B4963EF412B92BC5
+    }
+    databaseSession {
+        initPlsqlCode: hkd_demo_api.establish_context;
+    }
+    reportPrinting {
+        type: useInstanceSettings
+    }
+    errorHandling {
+        errorHandlingFunctionName: adm_error.apex_error_handler
+    }
+
+    substitution APP_NAME (
+        value {
+            staticValue: ADM Hooks Demo
+        }
+    )
+
+)
+

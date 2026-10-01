@@ -1,0 +1,627 @@
+page 5 (
+    name: Workflows & Rules
+    alias: WORKFLOWS-RULES
+    title: Workflows & Rules
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: What you are looking at
+        type: staticContent
+        source {
+            htmlCode:
+                ```html
+                <p>Two different kinds of customization live here, matching the two halves of the pattern:</p>
+                <ul>
+                  <li><strong>Workflows</strong> are asynchronous. The worker looks up the enabled ones for the event in <code>hkd_workflows</code> and runs them. Switching one off takes effect with the next message, with no change to the hook.</li>
+                  <li><strong>Blocked extensions</strong> are a synchronous rule. The hook reads them at upload time and refuses the file. Add <code>zip</code> and the next zip upload is rejected on the spot.</li>
+                </ul>
+                <p><a href="f?p=&APP_ID.:CODE:&SESSION.">Read the code behind it</a> (steps 3 and 7 to 11).</p>
+                ```
+        }
+        layout {
+            sequence: 5
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region add-extension (
+        name: Block another file extension
+        type: staticContent
+        source {
+            htmlCode: <p class="u-marginTop-md">The <strong>synchronous guard</strong> in AFTER_NEW_FILE_UPLOAD refuses files with these extensions. It also refuses empty files. The rules are read at upload time, so a change takes effect on the next upload.</p>
+        }
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region extensions (
+        name: Blocked extensions (checked by the hook)
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select e.extension
+                     , e.reason
+                     , e.created_at
+                     , null as actions
+                  from hkd_blocked_extensions e
+                 order by e.extension
+                ```
+        }
+        layout {
+            sequence: 30
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 107094706372786768
+        }
+
+        column ACTIONS (
+            type: themeTemplateComponent/actions
+            heading {
+                heading: Actions
+            }
+            layout {
+                sequence: 40
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: D
+            }
+
+            action actions-menu (
+                position: actions
+                template: menu
+                label: Actions Menu
+                layout {
+                    sequence: 10
+                }
+                appearance {
+                    displayType: icon
+                    icon: fa-navicon
+                }
+
+                menu remove (
+                    label: Remove
+                    layout {
+                        sequence: 10
+                    }
+                    behavior {
+                        type: triggerAction
+                    }
+                    serverSideCondition {
+                        type: itemIsNotNull
+                        item: EXTENSION
+                    }
+
+                    triggerAction native-execute-plsql-code (
+                        action: executeServerSideCode
+                        settings {
+                            plsqlCode:
+                                ```plsql
+                                begin
+                                    hkd_demo_api.remove_blocked_extension(:EXTENSION);
+                                end;
+                                ```
+                            itemsToSubmit: EXTENSION
+                        }
+                        execution {
+                            sequence: 10
+                        }
+                    )
+
+                    triggerAction native-refresh (
+                        action: refresh
+                        affectedElements {
+                            selectionType: region
+                            region: @extensions
+                        }
+                        execution {
+                            sequence: 20
+                        }
+                    )
+
+                )
+
+            )
+
+        )
+
+        column CREATED_AT (
+            type: plainText
+            heading {
+                heading: Added
+            }
+            layout {
+                sequence: 30
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        column EXTENSION (
+            type: plainText
+            heading {
+                heading: Extension
+            }
+            layout {
+                sequence: 10
+            }
+            source {
+                primaryKey: true
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        column REASON (
+            type: plainText
+            heading {
+                heading: Reason
+            }
+            layout {
+                sequence: 20
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+
+        savedReport primary (
+            visibility: primaryDefault
+            view {
+                rowsPerPage: 50
+            }
+
+            displayColumn ACTIONS (
+                sequence: 4
+            )
+
+            displayColumn CREATED_AT (
+                sequence: 3
+            )
+
+            displayColumn EXTENSION (
+                sequence: 1
+            )
+
+            displayColumn REASON (
+                sequence: 2
+            )
+
+        )
+
+    )
+
+    region workflows (
+        name: Asynchronous workflows (run by the worker)
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select w.workflow_code
+                     , w.name
+                     , w.hook_key
+                     , w.description
+                     , w.enabled_flag
+                     , null as actions
+                  from hkd_workflows w
+                 order by w.sort_order
+                ```
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 107093029876786760
+        }
+
+        column ACTIONS (
+            type: themeTemplateComponent/actions
+            heading {
+                heading: Actions
+            }
+            layout {
+                sequence: 70
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: F
+            }
+
+            action actions-menu (
+                position: actions
+                template: menu
+                label: Actions Menu
+                layout {
+                    sequence: 10
+                }
+                appearance {
+                    displayType: icon
+                    icon: fa-navicon
+                }
+
+                menu disable (
+                    label: Disable
+                    layout {
+                        sequence: 10
+                    }
+                    behavior {
+                        type: triggerAction
+                    }
+                    serverSideCondition {
+                        type: item=value
+                        item: ENABLED_FLAG
+                        value: Y
+                    }
+
+                    triggerAction native-execute-plsql-code (
+                        action: executeServerSideCode
+                        settings {
+                            plsqlCode:
+                                ```plsql
+                                begin
+                                    hkd_demo_api.set_workflow_enabled(:WORKFLOW_CODE, 'N');
+                                end;
+                                ```
+                            itemsToSubmit: WORKFLOW_CODE
+                        }
+                        execution {
+                            sequence: 10
+                        }
+                    )
+
+                    triggerAction native-refresh (
+                        action: refresh
+                        affectedElements {
+                            selectionType: region
+                            region: @workflows
+                        }
+                        execution {
+                            sequence: 20
+                        }
+                    )
+
+                )
+
+                menu enable (
+                    label: Enable
+                    layout {
+                        sequence: 20
+                    }
+                    behavior {
+                        type: triggerAction
+                    }
+                    serverSideCondition {
+                        type: item=value
+                        item: ENABLED_FLAG
+                        value: N
+                    }
+
+                    triggerAction native-execute-plsql-code (
+                        action: executeServerSideCode
+                        settings {
+                            plsqlCode:
+                                ```plsql
+                                begin
+                                    hkd_demo_api.set_workflow_enabled(:WORKFLOW_CODE, 'Y');
+                                end;
+                                ```
+                            itemsToSubmit: WORKFLOW_CODE
+                        }
+                        execution {
+                            sequence: 10
+                        }
+                    )
+
+                    triggerAction native-refresh (
+                        action: refresh
+                        affectedElements {
+                            selectionType: region
+                            region: @workflows
+                        }
+                        execution {
+                            sequence: 20
+                        }
+                    )
+
+                )
+
+            )
+
+        )
+
+        column DESCRIPTION (
+            type: plainText
+            heading {
+                heading: What it does
+            }
+            layout {
+                sequence: 40
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: D
+            }
+        )
+
+        column ENABLED_FLAG (
+            type: plainText
+            heading {
+                heading: Enabled
+            }
+            layout {
+                sequence: 60
+            }
+            source {
+                dataType: STRING
+                availableOnClient: true
+            }
+            advanced {
+                endUserAlias: E
+            }
+        )
+
+        column HOOK_KEY (
+            type: plainText
+            heading {
+                heading: Runs on event
+            }
+            layout {
+                sequence: 30
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        column NAME (
+            type: plainText
+            heading {
+                heading: Workflow
+            }
+            layout {
+                sequence: 20
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        column WORKFLOW_CODE (
+            type: plainText
+            heading {
+                heading: Code
+            }
+            layout {
+                sequence: 10
+            }
+            source {
+                primaryKey: true
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+
+        savedReport primary (
+            visibility: primaryDefault
+            view {
+                rowsPerPage: 50
+            }
+
+            displayColumn ACTIONS (
+                sequence: 6
+            )
+
+            displayColumn DESCRIPTION (
+                sequence: 4
+            )
+
+            displayColumn ENABLED_FLAG (
+                sequence: 5
+            )
+
+            displayColumn HOOK_KEY (
+                sequence: 3
+            )
+
+            displayColumn NAME (
+                sequence: 2
+            )
+
+            displayColumn WORKFLOW_CODE (
+                sequence: 1
+            )
+
+        )
+
+    )
+
+    pageItem P5_EXTENSION (
+        type: textField
+        label {
+            label: Extension
+            alignment: left
+        }
+        layout {
+            sequence: 10
+            region: @add-extension
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-above
+            templateOptions: #DEFAULT#
+            width: 20
+            valuePlaceholder: zip
+        }
+        validation {
+            maxLength: 20
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    pageItem P5_REASON (
+        type: textField
+        label {
+            label: Reason
+            alignment: left
+        }
+        layout {
+            sequence: 20
+            region: @add-extension
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-above
+            templateOptions: #DEFAULT#
+            width: 60
+            valuePlaceholder: Archives are not documents
+        }
+        validation {
+            maxLength: 200
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    button add-extension (
+        buttonName: ADD_EXTENSION
+        label: Block extension
+        layout {
+            sequence: 30
+            region: @add-extension
+            slot: regionBody
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+            icon: fa-ban
+        }
+        behavior {
+            warnOnUnsavedChanges: doNotCheck
+        }
+    )
+
+    process add-extension (
+        name: Block extension
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                begin
+                    hkd_demo_api.add_blocked_extension(
+                        p_extension => :P5_EXTENSION
+                      , p_reason    => :P5_REASON
+                    );
+                end;
+                ```
+        }
+        execution {
+            sequence: 10
+        }
+        successMessage {
+            successMessage: Extension blocked.
+        }
+        advanced {
+            executionMappingIdentifier: 107095944954786769
+        }
+        serverSideCondition {
+            whenButtonPressed: @add-extension
+        }
+    )
+
+)
+

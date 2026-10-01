@@ -1,0 +1,24 @@
+authorization has-adm-account (
+    name: Has ADM Account
+    type: plSqlFunctionBody
+    settings {
+        plsqlFunctionBody:
+            ```plsql
+            declare
+                l_count number;
+            begin
+                select count(*)
+                  into l_count
+                  from adm_users
+                 where username  = upper(:APP_USER)
+                   and is_active = 'Y';
+            
+                return l_count > 0;
+            end;
+            ```
+    }
+    error {
+        errorMessage: Your APEX account has no active ADM account. Add it in ADM first, for example with the User Access app.
+    }
+)
+

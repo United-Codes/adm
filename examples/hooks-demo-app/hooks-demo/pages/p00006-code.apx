@@ -1,0 +1,333 @@
+page 6 (
+    name: How It Works: The Code
+    alias: CODE
+    title: How It Works: The Code
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region hook-enqueue (
+        name: 5. Handing the work over: enqueue
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_hook_api'
+                  , p_unit    => 'enqueue_event'
+                  , p_intro   => q'[<p>One small message with the ids and the acting user, not the file. The enqueue uses the default visibility <code>ON_COMMIT</code>: the worker sees the message only when the upload commits, and a rollback removes it. A job created in the hook with <code>dbms_scheduler.create_job</code> would not behave that way: that call commits the caller's transaction, which a hook must never do.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 50
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region hook-entry (
+        name: 2. The hook entry point
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_hook_api'
+                  , p_unit    => 'after_new_file_upload'
+                  , p_intro   => q'[<p>This is all the hook is: guard, then queue. <code>after_new_file_version</code> does the same; <code>after_new_folder_creation</code> only queues, because there is nothing to refuse about a folder. Everything slow is deliberately <em>not</em> here.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region hook-guard (
+        name: 3. The synchronous guard: may refuse the operation
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_hook_api'
+                  , p_unit    => 'guard_file'
+                  , p_intro   => q'[<p>A rule that must hold <em>before</em> the file is accepted belongs in the hook. Raising from here aborts the whole upload and rolls it back. It reads only metadata (the name, the size), never the file content, which may sit in object storage. The error numbers are in <code>-20700</code> to <code>-20999</code>, the range reserved for customer code, and that range is what lets the message through: ADM does not wrap an error from it, so the user reads the reason written here. Any other error from a hook is replaced by a generic message.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 30
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region hook-log (
+        name: 4. Logging the refusal: an autonomous transaction
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_hook_api'
+                  , p_unit    => 'log_rejection'
+                  , p_intro   => q'[<p>The guard refuses by raising, and the raise rolls the transaction back. A normal insert into a log table would be rolled back with it. <code>pragma autonomous_transaction</code> makes this one row independent of the caller's transaction. It is the one case where a hook may commit, and it commits only this row. The user already reads the reason in the error. This row is for the administrator, because a refused upload leaves nothing else behind.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 40
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region read-first (
+        name: Read this first
+        type: staticContent
+        source {
+            htmlCode:
+                ```html
+                <p>Everything on this page is <strong>the code that is running right now</strong>. It is read from the database
+                (<code>adm_hooks</code> and <code>user_source</code>), so it cannot drift from what the other pages do. Follow one upload through it, top to bottom:</p>
+                <ol>
+                  <li>Your code (or this app) calls an ADM API, for example <code>adm_document_api.create_document</code>.</li>
+                  <li>ADM writes the document, then runs the <strong>hook</strong>: the snippet stored in <code>adm_hooks.hook_plsql</code> (step 1). Still the same transaction, nothing is committed yet.</li>
+                  <li>The hook entry point (step 2) <strong>guards</strong> (steps 3 and 4) and <strong>enqueues</strong> (step 5). Anything it raises aborts the upload.</li>
+                  <li>The upload commits. Only now the message becomes visible, and Oracle wakes the <strong>worker</strong> (steps 6 and 7).</li>
+                  <li>The worker runs the enabled <strong>workflows</strong> (steps 8 to 11) in a transaction of its own.</li>
+                </ol>
+                <p>The three rules for hook code: keep it fast, never commit or roll back, and raise only to refuse the operation.
+                Customer errors use the range <code>-20700 .. -20999</code>.</p>
+                ```
+        }
+        layout {
+            sequence: 5
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region registered (
+        name: 1. What ADM runs: the registered hook
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return q'[<p>ADM stores one snippet per event in <code>adm_hooks.hook_plsql</code> and executes it as dynamic PL/SQL with the event's parameters bound by name. It is a <strong>call</strong> into your own package, not the code itself, so the logic can be edited and recompiled without touching ADM. ADM runs it inside the caller's transaction, after the operation is written and before it is committed.</p>]'
+                    || hkd_demo_api.render_registered_hooks;
+                ```
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region wf-blueprint (
+        name: 11. Workflow: project folder blueprint
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_worker_api'
+                  , p_unit    => 'wf_folder_blueprint'
+                  , p_intro   => q'[<p>Creates folders through ADM's API, which fires <code>AFTER_NEW_FOLDER_CREATION</code> again for each of them. The check at the top is the <strong>recursion guard</strong>: the new sub folders sit inside the project folder, not inside <code>Projects</code>, so they are skipped. Without it the workflow would feed itself. It switches to the creating user first, so they own the folders.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 110
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region wf-classify (
+        name: 8. Workflow: intake classification
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_worker_api'
+                  , p_unit    => 'wf_intake_classify'
+                  , p_intro   => q'[<p>Calls ADM's own tag API, so the result is real ADM data: open the document in ADM and the tags are there. The deliberate <code>poison</code> failure sits at the top, it is what feeds the retry and exception queue demo. <code>add_tag_to_document</code> is idempotent, which is what makes a retry harmless.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 80
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region wf-digest (
+        name: 10. Workflow: version change digest
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_worker_api'
+                  , p_unit    => 'wf_version_digest'
+                  , p_intro   => q'[<p>Compares the new version with the previous one and writes a notification into <code>hkd_notifications</code>. This is the outbox idea: the workflow records <em>what to send</em>; a real system would have a separate sender (mail, webhook) read that table.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 100
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region wf-duplicate (
+        name: 9. Workflow: duplicate and integrity scan
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_worker_api'
+                  , p_unit    => 'wf_duplicate_scan'
+                  , p_intro   => q'[<p>ADM stores a checksum with every version, so finding exact copies is a lookup and never a file read. That matters when the content lives in object storage.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 90
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region worker-dispatch (
+        name: 7. Running the enabled workflows
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_worker_api'
+                  , p_unit    => 'process_event'
+                  , p_intro   => q'[<p>The registry table <code>hkd_workflows</code> decides what runs for an event. Switching a workflow off on the Workflows page takes effect with the next message. A workflow reports a status (OK, flagged, skipped) and a summary, which become the rows you see on the Workflow Results page. Workflows run again after a retry, so they have to be idempotent.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 70
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region worker-loop (
+        name: 6. The worker: one transaction per message
+        type: dynamicContent
+        source {
+            plsqlFunctionBody:
+                ```plsql
+                return hkd_demo_api.render_source(
+                    p_package => 'hkd_worker_api'
+                  , p_unit    => 'process_queue'
+                  , p_intro   => q'[<p>Dequeue takes a message and locks it, so any number of workers can run at the same time. The dequeue, the workflows and their effects then <strong>commit together</strong>. If anything raises, <code>rollback</code> puts the message back with its retry count raised; the failure is logged in an autonomous transaction so it survives the rollback. After three attempts (the queue's <code>max_retries</code>) Oracle moves the message to the exception queue. This is the part that cannot hurt the upload: it happened long ago.</p>]'
+                );
+                ```
+        }
+        layout {
+            sequence: 60
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+)
+

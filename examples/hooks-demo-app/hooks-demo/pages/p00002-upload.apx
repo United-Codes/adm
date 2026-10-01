@@ -1,0 +1,372 @@
+page 2 (
+    name: Upload & Create
+    alias: UPLOAD
+    title: Upload & Create
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region create-folder (
+        name: Create a folder
+        type: staticContent
+        source {
+            htmlCode: <p class="u-marginTop-md">Creates a folder through ADM's API. Create one directly inside a folder named <strong>Projects</strong> to see the folder blueprint workflow.</p>
+        }
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region try-these (
+        name: What happens, and things to try
+        type: staticContent
+        source {
+            htmlCode:
+                ```html
+                <p><strong>What happens when you press Upload.</strong> The page process calls <code>adm_document_api.create_document</code> (or <code>add_document_version</code> if the name exists). ADM stores the file, then runs the hook registered for the event, <em>inside the same transaction</em>. The hook refuses the file or puts one message on a queue and returns. Your request ends, the transaction commits, and only then does a separate worker session pick the message up. The results appear on the other pages a moment later, <em>not</em> during your request. <a href="f?p=&APP_ID.:CODE:&SESSION.">Read the code behind it</a>.</p>
+                <p><strong>Things to try</strong></p>
+                <ol>
+                  <li><strong>Classify.</strong> Upload <code>INV-2026-001.pdf</code> or <code>NDA - Acme.docx</code>. A moment later the document carries a <code>category</code> tag in ADM.</li>
+                  <li><strong>Duplicate.</strong> Upload the same file under a second name. The duplicate scan flags it and tags <code>duplicate-of</code>.</li>
+                  <li><strong>New version.</strong> Upload a changed file under the same name. The digest writes a notification into the outbox.</li>
+                  <li><strong>Refuse.</strong> Upload <code>setup.exe</code> or an empty file. The hook rejects it <em>synchronously</em>, the message tells you why, and nothing is stored.</li>
+                  <li><strong>Blueprint.</strong> Make a folder <code>Projects</code>, then a folder <code>Alpha</code> inside it. Three sub folders appear on their own.</li>
+                  <li><strong>Fail.</strong> Upload a file with <code>poison</code> in its name. The worker fails, the queue retries three times and then parks the message in the exception queue.</li>
+                </ol>
+                ```
+        }
+        layout {
+            sequence: 30
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region upload (
+        name: Upload a file
+        type: staticContent
+        source {
+            htmlCode: <p class="u-marginTop-md">Uploads through ADM's own PL/SQL API, exactly like any other application would. A name that already exists in the folder becomes a <strong>new version</strong> of that document, anything else a <strong>new document</strong>.</p>
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    pageItem P2_FILE (
+        type: fileUpload
+        label {
+            label: File
+            alignment: left
+        }
+        display {
+            displayAs: blockDropzone
+            dropzoneTitle: Drop a file here
+            dropzoneDesc: or click to browse
+        }
+        storage {
+            type: appTempFiles
+        }
+        layout {
+            sequence: 20
+            region: @upload
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-above
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    pageItem P2_FOLDER_ID (
+        type: selectList
+        label {
+            label: Folder
+            alignment: left
+        }
+        lov {
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select folder_path as d
+                     , folder_id as r
+                  from adm_my_folders_v
+                 where (folder_path = '/users/' || lower(:APP_USER)
+                        or folder_path like '/users/' || lower(:APP_USER) || '/%')
+                   and folder_path not like '%/trash%'
+                 order by folder_path
+                ```
+            displayNullValue: false
+        }
+        layout {
+            sequence: 10
+            region: @upload
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-above
+            templateOptions: #DEFAULT#
+        }
+        validation {
+            valueRequired: true
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    pageItem P2_FOLDER_NAME (
+        type: textField
+        label {
+            label: Folder name
+            alignment: left
+        }
+        layout {
+            sequence: 20
+            region: @create-folder
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-above
+            templateOptions: #DEFAULT#
+            width: 40
+            valuePlaceholder: Projects
+        }
+        validation {
+            maxLength: 255
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    pageItem P2_MESSAGE (
+        type: hidden
+        layout {
+            sequence: 30
+            region: @upload
+            slot: regionBody
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    pageItem P2_PARENT_FOLDER_ID (
+        type: selectList
+        label {
+            label: Parent folder
+            alignment: left
+        }
+        lov {
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select folder_path as d
+                     , folder_id as r
+                  from adm_my_folders_v
+                 where (folder_path = '/users/' || lower(:APP_USER)
+                        or folder_path like '/users/' || lower(:APP_USER) || '/%')
+                   and folder_path not like '%/trash%'
+                 order by folder_path
+                ```
+            displayNullValue: false
+        }
+        layout {
+            sequence: 10
+            region: @create-folder
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-above
+            templateOptions: #DEFAULT#
+        }
+        validation {
+            valueRequired: true
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    button create-folder (
+        buttonName: CREATE_FOLDER
+        label: Create folder
+        layout {
+            sequence: 30
+            region: @create-folder
+            slot: regionBody
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+            icon: fa-folder-o
+        }
+        behavior {
+            warnOnUnsavedChanges: doNotCheck
+        }
+    )
+
+    button upload (
+        buttonName: UPLOAD
+        label: Upload
+        layout {
+            sequence: 40
+            region: @upload
+            slot: regionBody
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+            icon: fa-upload
+        }
+        behavior {
+            warnOnUnsavedChanges: doNotCheck
+        }
+    )
+
+    validation file-required (
+        name: File is required
+        execution {
+            sequence: 10
+        }
+        validation {
+            type: itemIsNotNull
+            item: P2_FILE
+        }
+        error {
+            errorMessage: Choose a file to upload.
+            associatedItem: @P2_FILE
+        }
+        serverSideCondition {
+            whenButtonPressed: @upload
+        }
+    )
+
+    validation folder-name-required (
+        name: Folder name is required
+        execution {
+            sequence: 20
+        }
+        validation {
+            type: itemIsNotNull
+            item: P2_FOLDER_NAME
+        }
+        error {
+            errorMessage: Enter a name for the new folder.
+            associatedItem: @P2_FOLDER_NAME
+        }
+        serverSideCondition {
+            whenButtonPressed: @create-folder
+        }
+    )
+
+    process create-folder (
+        name: Create folder
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                declare
+                    l_folder_id number;
+                begin
+                    l_folder_id := hkd_demo_api.create_folder(
+                        p_parent_folder_id => :P2_PARENT_FOLDER_ID
+                      , p_folder_name      => :P2_FOLDER_NAME
+                    );
+                end;
+                ```
+        }
+        execution {
+            sequence: 20
+        }
+        successMessage {
+            successMessage: Folder created. The AFTER_NEW_FOLDER_CREATION hook ran and queued an event.
+        }
+        advanced {
+            executionMappingIdentifier: 107086632675786752
+        }
+        serverSideCondition {
+            whenButtonPressed: @create-folder
+        }
+    )
+
+    process upload-file (
+        name: Upload file
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                declare
+                    l_document_id number;
+                    l_result      varchar2(30 char);
+                    l_file_name   varchar2(1000 char);
+                begin
+                    hkd_demo_api.upload_file(
+                        p_folder_id    => :P2_FOLDER_ID
+                      , p_temp_file    => :P2_FILE
+                      , po_document_id => l_document_id
+                      , po_result      => l_result
+                      , po_file_name   => l_file_name
+                    );
+                
+                    :P2_MESSAGE := case l_result
+                        when 'CREATED'     then 'Created document "' || l_file_name || '". The AFTER_NEW_FILE_UPLOAD hook ran and queued an event.'
+                        when 'NEW_VERSION' then 'Added a new version of "' || l_file_name || '". The AFTER_NEW_FILE_VERSION hook ran and queued an event.'
+                        else 'ADM ignored the upload: "' || l_file_name || '" is identical to its latest version, so nothing was created and no hook fired.'
+                    end;
+                end;
+                ```
+        }
+        execution {
+            sequence: 10
+        }
+        successMessage {
+            successMessage: &P2_MESSAGE.
+        }
+        advanced {
+            executionMappingIdentifier: 107086565096786751
+        }
+        serverSideCondition {
+            whenButtonPressed: @upload
+        }
+    )
+
+)
+
