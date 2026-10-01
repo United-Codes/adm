@@ -7,6 +7,22 @@ create or replace package body hkd_hook_api as
   -- shows the message to the user. So the message is written for the user.
   c_err_blocked_extension constant number := -20701;
   c_err_empty_file        constant number := -20702;
+  c_err_generation_limit  constant number := -20703;
+
+  -- A chain of events: a workflow's work starts an event, whose workflow starts the next one.
+  -- Real chains are two or three long. Six in a row is a loop.
+  c_max_generation        constant number := 5;
+
+  g_generation            number := 0;
+
+
+  procedure set_generation (
+    p_generation in number
+  )
+  as
+  begin
+    g_generation := p_generation;
+  end set_generation;
 
 
   /**
@@ -100,7 +116,17 @@ create or replace package body hkd_hook_api as
     l_enqueue_options    sys.dbms_aq.enqueue_options_t;
     l_message_properties sys.dbms_aq.message_properties_t;
     l_msg_id             raw(16);
+    l_generation         number := g_generation + 1;
   begin
+    -- Raising here fails the work that started the chain: the worker rolls that message back,
+    -- the failure shows in hkd_workflow_runs and the message ends in the exception queue.
+    if l_generation > c_max_generation then
+      raise_application_error(
+        c_err_generation_limit
+      , 'More than ' || c_max_generation || ' events in a row started each other. A workflow probably feeds itself.'
+      );
+    end if;
+
     sys.dbms_aq.enqueue(
       queue_name         => 'HKD_EVENT_Q'
     , enqueue_options    => l_enqueue_options
@@ -111,6 +137,7 @@ create or replace package body hkd_hook_api as
                             , p_version_id
                             , p_folder_id
                             , sys_context('ADM_CONTEXT', 'ADM_USERNAME')
+                            , l_generation
                             )
     , msgid              => l_msg_id
     );

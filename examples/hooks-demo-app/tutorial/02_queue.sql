@@ -33,6 +33,7 @@ begin
       , version_id  number
       , folder_id   number
       , actor       varchar2(255 char)
+      , generation  number
       )
     ]';
   end if;
@@ -106,6 +107,11 @@ end hkd_visible_messages;
 
 create or replace package hkd_hook_api as
 
+  -- Tells the hook the generation of the event the worker is handling, 0 outside the worker.
+  procedure set_generation (
+    p_generation in number
+  );
+
   procedure after_new_file_upload (
     p_document_id in adm_documents.document_id%type
   , p_version_id  in adm_document_versions.version_id%type
@@ -121,6 +127,18 @@ create or replace package body hkd_hook_api as
   -- Errors raised by customer code use -20700 .. -20999. ADM never uses that range.
   c_err_blocked_extension constant number := -20701;
   c_err_empty_file        constant number := -20702;
+  c_err_generation_limit  constant number := -20703;
+  c_max_generation        constant number := 5;
+
+  g_generation            number := 0;
+
+  procedure set_generation (
+    p_generation in number
+  )
+  as
+  begin
+    g_generation := p_generation;
+  end set_generation;
 
 
   /**
@@ -214,7 +232,17 @@ create or replace package body hkd_hook_api as
     l_enqueue_options    sys.dbms_aq.enqueue_options_t;
     l_message_properties sys.dbms_aq.message_properties_t;
     l_msg_id             raw(16);
+    l_generation         number := g_generation + 1;
   begin
+    -- Raising here fails the work that started the chain: the worker rolls that message back,
+    -- the failure shows in hkd_workflow_runs and the message ends in the exception queue.
+    if l_generation > c_max_generation then
+      raise_application_error(
+        c_err_generation_limit
+      , 'More than ' || c_max_generation || ' events in a row started each other. A workflow probably feeds itself.'
+      );
+    end if;
+
     sys.dbms_aq.enqueue(
       queue_name         => 'HKD_EVENT_Q'
     , enqueue_options    => l_enqueue_options
@@ -225,6 +253,7 @@ create or replace package body hkd_hook_api as
                             , p_version_id
                             , p_folder_id
                             , sys_context('ADM_CONTEXT', 'ADM_USERNAME')
+                            , l_generation
                             )
     , msgid              => l_msg_id
     );

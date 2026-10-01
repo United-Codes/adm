@@ -205,6 +205,11 @@ hu = lambda n: unit(hook_pkb, n)
 def hook_api_stage2():
     s = """create or replace package hkd_hook_api as
 
+  -- Tells the hook the generation of the event the worker is handling, 0 outside the worker.
+  procedure set_generation (
+    p_generation in number
+  );
+
   procedure after_new_file_upload (
     p_document_id in adm_documents.document_id%type
   , p_version_id  in adm_document_versions.version_id%type
@@ -220,6 +225,18 @@ create or replace package body hkd_hook_api as
   -- Errors raised by customer code use -20700 .. -20999. ADM never uses that range.
   c_err_blocked_extension constant number := -20701;
   c_err_empty_file        constant number := -20702;
+  c_err_generation_limit  constant number := -20703;
+  c_max_generation        constant number := 5;
+
+  g_generation            number := 0;
+
+  procedure set_generation (
+    p_generation in number
+  )
+  as
+  begin
+    g_generation := p_generation;
+  end set_generation;
 
 
 """

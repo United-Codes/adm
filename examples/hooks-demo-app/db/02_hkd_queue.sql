@@ -33,6 +33,7 @@ begin
       , version_id  number
       , folder_id   number
       , actor       varchar2(255 char)
+      , generation  number
       )
     ]';
   end if;

@@ -400,6 +400,10 @@ create or replace package body hkd_worker_api as
       l_delivery.attempt     := l_message_properties.attempts + 1;
       l_delivery.enqueued_at := cast(l_message_properties.enqueue_time as timestamp with local time zone);
 
+      -- Events that the workflows of this message cause are one generation further on.
+      -- A message from before the column existed has none; it counts as a first event.
+      hkd_hook_api.set_generation(nvl(l_event.generation, 1));
+
       process_event(l_event, l_delivery);
 
       -- This is the worker's own transaction: the dequeue and everything the workflows did
@@ -407,6 +411,8 @@ create or replace package body hkd_worker_api as
       commit;
       l_handled := l_handled + 1;
     end loop message_loop;
+
+    hkd_hook_api.set_generation(0);
 
     -- The workflows signed this session in as the system user or as an actor. Give the caller its own
     -- identity back: the worker also runs inside a user's session (the Process queue now button).
@@ -416,6 +422,7 @@ create or replace package body hkd_worker_api as
   exception
     when others then
       -- for example ORA-25226 while the queue is stopped
+      hkd_hook_api.set_generation(0);
       adm_context_api.restore_context(l_user, l_role, l_source);
       raise;
   end process_queue;

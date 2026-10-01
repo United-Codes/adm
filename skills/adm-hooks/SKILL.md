@@ -124,7 +124,13 @@ AI Pack or a bundled library.
 ## Things a hook should not do
 
 - **Do not call the ADM API back in a way that re-triggers itself.** `AFTER_NEW_FILE_UPLOAD`
-  calling `adm_document_api.create_document` fires the hook again, recursively.
+  calling `adm_document_api.create_document` fires the hook again, recursively. ADM stops hooks
+  that run inside one another at 10 levels (`adm_error.c_err_hook_depth_exceeded`, `ORA-20112`).
+  An administrator or the system user can pass `p_run_hooks => false` to `add_folder`,
+  `create_document` or `add_document_version` to skip the hooks for one call; any other user gets
+  `c_err_admin_required`. The audit entry says `(hooks skipped)`. A loop through a queue is
+  invisible to ADM, because each event runs in a new transaction: put a condition in the workflow
+  and carry a generation count in the queued message.
 - **Do not do slow work inline.** The user is waiting on the upload and holding a transaction
   open. Insert a queue row (as above) and let a scheduled job do the work.
 - **Do not send mail or call a web service and expect it to be undone.** If the transaction rolls
