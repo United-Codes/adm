@@ -11,17 +11,55 @@ depending on plumbing that changes between releases.
 
 ## Install
 
-Per project — the skills apply to everyone who works in that repository:
+### Install with the Skills CLI
+
+You need Node.js and npm, which includes `npx`. From your project directory, run:
+
+```sh
+npx skills add United-Codes/adm
+```
+
+Select the skills and coding agents in the installer. The default scope is the current project.
+To install for your user account across projects, run:
+
+```sh
+npx skills add United-Codes/adm --global
+```
+
+To select one skill, run:
+
+```sh
+npx skills add United-Codes/adm --skill adm-plsql
+```
+
+To install all nine skills for a specific agent, use `--skill '*'` and `--agent`:
+
+```sh
+npx skills add United-Codes/adm --skill '*' --agent claude-code
+```
+
+Use `--agent codex` for Codex. To list the available skills without installing them, run:
+
+```sh
+npx skills add United-Codes/adm --list
+```
+
+See the [Skills CLI documentation](https://github.com/vercel-labs/skills#install-a-skill) for other agents and options.
+
+### Copy the files manually
+
+From the cloned public repo root or the extracted delivery archive, copy the skills into your project:
 
 ```sh
 mkdir -p <your-project>/.claude/skills
-cp -R adm-* <your-project>/.claude/skills/
+cp -R skills/adm-* <your-project>/.claude/skills/
 ```
 
-Or for every project you work on:
+To install them for all your Claude Code projects, run:
 
 ```sh
-cp -R adm-* ~/.claude/skills/
+mkdir -p ~/.claude/skills
+cp -R skills/adm-* ~/.claude/skills/
 ```
 
 Then start a new session. The agent loads a skill when the task matches its description; you can

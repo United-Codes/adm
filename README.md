@@ -26,8 +26,14 @@ application uses APEXlang; you can run the database tutorial without importing i
 ## Agent skills
 
 The [skills](skills/README.md) describe ADM's public APIs for coding agents.
+From your project directory, install them with:
+
+```sh
+npx skills add United-Codes/adm
+```
+
 Start with `adm-plsql`, then use the skills for the domains you need.
-The skills README states the ADM version they describe.
+The skills README explains installation options and states the ADM version they describe.
 
 ## Documentation and compatibility
 
