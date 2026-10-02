@@ -5,10 +5,11 @@
 --
 -- What it does: installs the folder part of the finished demo, with ONE change that makes it wrong. The
 -- naive worker gives EVERY new folder three sub folders. Each sub folder is a new folder, so its hook
--- fires again. Run 06_blueprint.sql afterwards to replace it with the correct version.
+-- fires again. Run ../db/install.sql afterwards to restore the complete demo with the correct version.
 --
 -- This script stops the wake-up job and the notification first, so the loop only advances when you run the
--- worker by hand. 06_blueprint.sql starts them again.
+-- worker by hand. Restore the complete demo with ../db/install.sql afterwards, then enable its job:
+--   exec sys.dbms_scheduler.enable('HKD_PROCESS_QUEUE_JOB');
 --
 -- It runs the files of the finished demo from ../db, so keep the examples/hooks-demo-app layout.
 
@@ -596,7 +597,7 @@ end hkd_worker_api;
 show errors
 
 -- The folder hook. This registers the three hooks of the finished demo. It also recreates the
--- notification and re-enables nothing: the job stays disabled until 06_blueprint.sql.
+-- notification and re-enables nothing: enable the job after restoring the complete demo.
 @@../db/06_hkd_register_hooks.sql
 
 begin

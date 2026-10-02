@@ -72,7 +72,9 @@ Sign in with an APEX account that **also has an active ADM account** (the app re
 
 `tutorial/` holds the scripts of the docs tutorial "Build workflows on hooks": `00_setup.sql` to `06_blueprint.sql`, one or
 two for each lesson, and `99_teardown.sql`. Each script builds on the one before it, with the same object names as the demo, and
-`06_blueprint.sql` installs the finished demo database from `db/`. The scripts for lessons 3 to 5 are generated from
+`06_blueprint.sql` extends the tutorial with the folder hook and standard project layout. To add the complete demo,
+including the version digest, outbox, and APEX support package, run `make db-install` separately.
+The staged scripts for lessons 2 to 6 are generated from
 `db/04_hkd_worker_api.pkb` by taking features away, so change the demo package first and regenerate. Run the scripts from the
 `tutorial/` directory.
 

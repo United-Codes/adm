@@ -4,8 +4,8 @@ import re, textwrap
 #
 #   python3 generate_stages.py
 #
-# Lessons 3 to 5 install the worker with features taken away (no failure handling, no wake-up), and lesson 6
-# installs the demo itself, so the last lesson cannot drift from the demo. The scripts written by hand are
+# Lessons 3 to 6 add workflows, failure handling, automatic processing, and the folder blueprint.
+# They reuse the demo's functions without installing its extra version-digest workflow. The scripts written by hand are
 # 00_setup.sql, 01_guard.sql and 99_teardown.sql.
 import os
 ROOT=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..')+os.sep
@@ -187,7 +187,11 @@ def body(stage):
     parts += [banner('Workflow 1: intake classification (AFTER_NEW_FILE_UPLOAD)'), classify_document, '\n\n',
               wf_classify_full if failures else wf_classify_s3, '\n\n']
     parts += [banner('Workflow 2: duplicate and integrity scan (AFTER_NEW_FILE_UPLOAD)'), wf_dup, '\n\n']
-    parts += [banner('Dispatch'), record_run, '\n\n', process_event(cases_s3), '\n\n']
+    cases = cases_s3
+    if stage >= 6:
+        parts += [banner('Project folder blueprint (AFTER_NEW_FOLDER_CREATION)'), u('wf_folder_blueprint'), '\n\n']
+        cases += "\n                     when 'FOLDER_BLUEPRINT' then wf_folder_blueprint(p_event)"
+    parts += [banner('Dispatch'), record_run, '\n\n', process_event(cases), '\n\n']
     if failures:
         parts += [record_failure, '\n\n', process_queue_fn, '\n\n']
     else:
@@ -255,6 +259,17 @@ end hkd_hook_api;
 /
 """
     return s
+
+def hook_api_stage6():
+    s = hook_api_stage2()
+    declaration = """  procedure after_new_folder_creation (
+    p_folder_id in adm_folders.folder_id%type
+  );
+
+"""
+    s = s.replace('end hkd_hook_api;', declaration + 'end hkd_hook_api;', 1)
+    pos = s.rindex('end hkd_hook_api;')
+    return s[:pos] + hu('after_new_folder_creation') + '\n\n' + s[pos:]
 
 # ---------------------------------------------------------------- the naive blueprint (lesson 6)
 guard_re = re.compile(r"    -- The recursion guard\..*?    end if;\n\n", re.S)
@@ -440,10 +455,11 @@ when not matched then
 --
 -- What it does: installs the folder part of the finished demo, with ONE change that makes it wrong. The
 -- naive worker gives EVERY new folder three sub folders. Each sub folder is a new folder, so its hook
--- fires again. Run 06_blueprint.sql afterwards to replace it with the correct version.
+-- fires again. Run ../db/install.sql afterwards to restore the complete demo with the correct version.
 --
 -- This script stops the wake-up job and the notification first, so the loop only advances when you run the
--- worker by hand. 06_blueprint.sql starts them again.
+-- worker by hand. Restore the complete demo with ../db/install.sql afterwards, then enable its job:
+--   exec sys.dbms_scheduler.enable('HKD_PROCESS_QUEUE_JOB');
 --
 -- It runs the files of the finished demo from ../db, so keep the examples/hooks-demo-app layout.
 
@@ -478,7 +494,7 @@ end;
 show errors
 
 -- The folder hook. This registers the three hooks of the finished demo. It also recreates the
--- notification and re-enables nothing: the job stays disabled until 06_blueprint.sql.
+-- notification and re-enables nothing: enable the job after restoring the complete demo.
 @@../db/06_hkd_register_hooks.sql
 
 begin
@@ -499,29 +515,58 @@ end;
 """
     open(OUT+'06_blueprint_loop.sql','w').write(s + END)
 
-    # ---- 06
-    s = """-- Lesson 6: the folder blueprint with its guard. Run in SQLcl or SQL*Plus, connected as the ADM schema
--- owner, after 06_blueprint_loop.sql (or straight after 05_wake.sql).
+    # ---- 06: extend stage 5 with the folder workflow, without installing the full demo.
+    s = """-- Lesson 6: give projects a standard folder layout. Run as the ADM schema owner after 05_wake.sql.
 --
 --   @06_blueprint.sql
 --
--- What it does: installs the finished demo (examples/hooks-demo-app/db) over everything the lessons
--- built. Same object names, so the lessons' packages are replaced, the missing tables are created and
--- the missing hooks are registered. The folder blueprint now only applies to a folder directly
--- inside a folder named Projects. The worker job and the notification are enabled again.
---
--- It does NOT create the APEX application: see the Hooks demo app page for that.
+-- Adds the folder hook and FOLDER_BLUEPRINT workflow to the existing tutorial packages. Keeps
+-- upload classification, duplicate checks, retries, and automatic processing. Existing tables,
+-- workflow settings, and logs are preserved. Does not install the version digest or the APEX app.
+-- For the optional 06_blueprint_loop.sql experiment, restore the full demo with ../db/install.sql.
 
-@@../db/install.sql
+""" + install_note + "\n" + hook_api_stage6() + "\n" + spec(True, True) + "\n" + body(6) + "\nshow errors\n" + """
+merge into hkd_workflows t
+using (
+  select 'FOLDER_BLUEPRINT' as workflow_code
+       , 'AFTER_NEW_FOLDER_CREATION' as hook_key
+       , 40 as sort_order
+       , 'Project folder blueprint' as name
+       , 'Creates standard subfolders for a new folder directly inside Projects.' as description
+    from dual
+) s
+on (t.workflow_code = s.workflow_code)
+when matched then
+  update set t.hook_key = s.hook_key
+           , t.sort_order = s.sort_order
+           , t.name = s.name
+           , t.description = s.description
+when not matched then
+  insert (workflow_code, hook_key, sort_order, name, description)
+  values (s.workflow_code, s.hook_key, s.sort_order, s.name, s.description);
 
+declare
+  l_current adm_hooks.hook_plsql%type;
 begin
-  for r in (select job_name from user_scheduler_jobs where job_name = 'HKD_PROCESS_QUEUE_JOB') loop
-    sys.dbms_scheduler.enable(r.job_name);
-  end loop;
+  select hook_plsql
+    into l_current
+    from adm_hooks
+   where hook_key = 'AFTER_NEW_FOLDER_CREATION';
+
+  if l_current is not null and l_current not like 'hkd_hook_api.%' then
+    raise_application_error(-20700, 'AFTER_NEW_FOLDER_CREATION already runs other code. Not overwriting it.');
+  end if;
+
+  update adm_hooks
+     set hook_plsql = 'hkd_hook_api.after_new_folder_creation(p_folder_id => :p_folder_id);'
+       , updated_by = 'HKD_TUTORIAL'
+       , updated_date = current_timestamp
+   where hook_key = 'AFTER_NEW_FOLDER_CREATION';
+  commit;
 end;
 /
 """
-    open(OUT+'06_blueprint.sql','w').write(s)
+    open(OUT+'06_blueprint.sql','w').write(s + END)
 
 write_stage_scripts()
 import os
