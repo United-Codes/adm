@@ -1,0 +1,451 @@
+page 7 (
+    name: AI Review
+    alias: AI-REVIEW
+    title: AI Review
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: Review verdicts
+        type: plSqlDynamicContent
+        source {
+            plsqlCode:
+                ```plsql
+                begin
+                    htp.p('<p>The classifier reads each uploaded file and gives a <strong>verdict</strong>: a document type and a short reason. This page shows the newest verdict of each document that you can see.</p>');
+                    htp.p('<p>Each document type has a <strong>release rule</strong>. The rules are stored in the table <code>hkd_ai_doc_types</code>:</p>');
+                    htp.p('<ul>');
+                    for r in (
+                        select doc_type
+                             , release_mode
+                          from hkd_ai_doc_types
+                         order by sort_order
+                    ) loop
+                        htp.p(
+                            '<li><strong>' || apex_escape.html(r.doc_type) || '</strong>: '
+                            || case r.release_mode
+                                 when 'AUTO' then 'automatic. The verdict takes effect when the classifier writes it.'
+                                 else 'review. The verdict takes effect only after a person accepts it.'
+                               end
+                            || '</li>'
+                        );
+                    end loop;
+                    htp.p('</ul>');
+                    htp.p('<p>The rows with the status <strong>Needs review</strong> or <strong>Revoked</strong> wait for a person. The report shows <strong>Needs review</strong> first: change the filter to see the revoked rows. Choose <strong>Accept</strong> to keep the type of the model. Choose <strong>Accept as</strong> to set another type. Rows with the status <strong>Released</strong> took effect on their own. Choose <strong>Revoke release</strong> to take a released verdict back.</p>');
+                end;
+                ```
+        }
+        layout {
+            sequence: 5
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region verdicts (
+        name: Verdicts
+        type: interactiveReport
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select v.result_id
+                     , v.document_name
+                     , v.doc_type
+                     , v.status as status_code
+                     , case v.status
+                         when 'RELEASED' then '<span class="fa fa-check-circle u-success-text" aria-hidden="true"></span> Released'
+                         when 'ACCEPTED' then '<span class="fa fa-check-circle-o u-success-text" aria-hidden="true"></span> Accepted'
+                         when 'NEEDS_REVIEW' then '<span class="fa fa-flag u-warning-text" aria-hidden="true"></span> Needs review'
+                         when 'REVOKED' then '<span class="fa fa-ban u-warning-text" aria-hidden="true"></span> Revoked'
+                         when 'FAILED' then '<span class="fa fa-times-circle u-danger-text" aria-hidden="true"></span> Failed'
+                         else '<span class="fa fa-minus-circle u-color-9-text" aria-hidden="true"></span> Unknown'
+                       end as status
+                     , v.reason
+                     , v.prompt_tokens + v.completion_tokens as tokens
+                     , v.created_at
+                     , v.reviewed_by
+                     , null as actions
+                  from hkd_ai_latest_v v
+                 where v.document_id in (
+                         select m.document_id
+                           from adm_my_documents_v m
+                       )
+                 order by v.created_at desc
+                        , v.result_id desc
+                ```
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+        pagination {
+            type: rowRangesXToY
+        }
+        advanced {
+            savedReportMappingIdentifier: 110281520439598208
+        }
+
+        column ACTIONS (
+            type: themeTemplateComponent/actions
+            heading {
+                heading: Actions
+            }
+            layout {
+                sequence: 100
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: I
+            }
+
+            action actions-menu (
+                position: actions
+                template: menu
+                label: Actions Menu
+                layout {
+                    sequence: 10
+                }
+                appearance {
+                    displayType: icon
+                    icon: fa-navicon
+                }
+
+                menu accept (
+                    label: Accept
+                    layout {
+                        sequence: 10
+                    }
+                    behavior {
+                        target: {
+                            page: 8
+                            items: {
+                                P8_RESULT_ID: &RESULT_ID.
+                                P8_ACTION: ACCEPT
+                            }
+                            clearCache: 8
+                        }
+                    }
+                    appearance {
+                        icon: fa-check
+                    }
+                    serverSideCondition {
+                        type: expression
+                        plsqlExpression: :STATUS_CODE in ('NEEDS_REVIEW', 'REVOKED') and :DOC_TYPE is not null
+                    }
+                )
+
+                menu accept-as (
+                    label: Accept as...
+                    layout {
+                        sequence: 20
+                    }
+                    behavior {
+                        target: {
+                            page: 8
+                            items: {
+                                P8_RESULT_ID: &RESULT_ID.
+                                P8_ACTION: ACCEPT_AS
+                            }
+                            clearCache: 8
+                        }
+                    }
+                    appearance {
+                        icon: fa-pencil
+                    }
+                    serverSideCondition {
+                        type: expression
+                        plsqlExpression: :STATUS_CODE in ('NEEDS_REVIEW', 'REVOKED')
+                    }
+                )
+
+                menu revoke (
+                    label: Revoke release
+                    layout {
+                        sequence: 30
+                    }
+                    behavior {
+                        target: {
+                            page: 8
+                            items: {
+                                P8_RESULT_ID: &RESULT_ID.
+                                P8_ACTION: REVOKE
+                            }
+                            clearCache: 8
+                        }
+                    }
+                    appearance {
+                        icon: fa-undo
+                    }
+                    serverSideCondition {
+                        type: expression
+                        plsqlExpression: :STATUS_CODE in ('RELEASED', 'ACCEPTED')
+                    }
+                )
+
+            )
+
+        )
+
+        column CREATED_AT (
+            type: plainText
+            heading {
+                heading: Classified
+            }
+            layout {
+                sequence: 70
+            }
+            appearance {
+                formatMask: SINCE
+            }
+            source {
+                dataType: DATE
+            }
+            advanced {
+                endUserAlias: G
+            }
+        )
+
+        column DOCUMENT_NAME (
+            type: plainText
+            heading {
+                heading: Document
+            }
+            layout {
+                sequence: 20
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: B
+            }
+        )
+
+        column DOC_TYPE (
+            type: plainText
+            heading {
+                heading: Type
+            }
+            layout {
+                sequence: 30
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: C
+            }
+        )
+
+        column REASON (
+            type: plainText
+            heading {
+                heading: Reason of the model
+            }
+            layout {
+                sequence: 50
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: E
+            }
+        )
+
+        column RESULT_ID (
+            type: plainText
+            heading {
+                heading: Result
+            }
+            layout {
+                sequence: 10
+            }
+            source {
+                primaryKey: true
+                dataType: NUMBER
+            }
+            advanced {
+                endUserAlias: A
+            }
+        )
+
+        column REVIEWED_BY (
+            type: plainText
+            heading {
+                heading: Reviewed by
+            }
+            layout {
+                sequence: 80
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: H
+            }
+        )
+
+        column STATUS (
+            type: plainText
+            heading {
+                heading: Status
+            }
+            layout {
+                sequence: 40
+            }
+            columnFormatting {
+                htmlExpression: #STATUS#
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: D
+            }
+            security {
+                escapeSpecialChars: false
+            }
+        )
+
+        column STATUS_CODE (
+            type: plainText
+            heading {
+                heading: Status code
+            }
+            layout {
+                sequence: 45
+            }
+            source {
+                dataType: STRING
+            }
+            advanced {
+                endUserAlias: J
+            }
+        )
+
+        column TOKENS (
+            type: plainText
+            heading {
+                heading: Tokens
+            }
+            layout {
+                sequence: 60
+            }
+            source {
+                dataType: NUMBER
+            }
+            advanced {
+                endUserAlias: F
+            }
+        )
+
+        page {
+            borderWidth: 0.5
+            borderColor: #666666
+        }
+
+        savedReport primary (
+            visibility: primaryDefault
+            view {
+                rowsPerPage: 50
+            }
+
+            displayColumn ACTIONS (
+                sequence: 8
+            )
+
+            displayColumn CREATED_AT (
+                sequence: 6
+            )
+
+            displayColumn DOCUMENT_NAME (
+                sequence: 1
+            )
+
+            displayColumn DOC_TYPE (
+                sequence: 2
+            )
+
+            displayColumn REASON (
+                sequence: 4
+            )
+
+            displayColumn REVIEWED_BY (
+                sequence: 7
+            )
+
+            displayColumn STATUS (
+                sequence: 3
+            )
+
+            displayColumn TOKENS (
+                sequence: 5
+            )
+
+            filter status-needs-review (
+                column: STATUS_CODE
+                value: NEEDS_REVIEW
+            )
+
+        )
+
+    )
+
+    dynamicAction refresh-after-dialog (
+        name: Refresh verdicts after the dialog closes
+        execution {
+            sequence: 10
+        }
+        when {
+            event: apexafterclosecanceldialog
+            selectionType: jsExpression
+            javaScriptExpression: window
+        }
+        clientSideCondition {
+            type: jsExpression
+            javaScriptExpression: this.data.dialogPageId === 8
+        }
+
+        action native-refresh-verdicts (
+            action: refresh
+            affectedElements {
+                selectionType: region
+                region: @verdicts
+            }
+            execution {
+                sequence: 10
+                fireOnInit: false
+            }
+        )
+
+    )
+
+)
+

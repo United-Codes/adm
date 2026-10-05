@@ -1,0 +1,552 @@
+page 8 (
+    name: Review Verdict
+    alias: REVIEW-VERDICT
+    title: Review verdict
+    appearance {
+        pageMode: modalDialog
+        dialogTemplate: @/modal-dialog
+        templateOptions: #DEFAULT#
+    }
+    dialog {
+        width: 640px
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about-accept (
+        name: What Accept does
+        type: staticContent
+        source {
+            htmlCode: <p>Accept puts the verdict of the model into effect. ADM sets the tag <code>category</code> to the type, removes the tag <code>needs-review</code>, and adds the annotation <code>kb.</code> followed by the type, for example <code>kb.contract</code>.</p>
+        }
+        layout {
+            sequence: 5
+            slot: contentBody
+        }
+        appearance {
+            template: @/blank-with-attributes
+            templateOptions: #DEFAULT#
+        }
+        serverSideCondition {
+            type: item=value
+            item: P8_ACTION
+            value: ACCEPT
+        }
+    )
+
+    region about-accept-as (
+        name: What Accept as does
+        type: staticContent
+        source {
+            htmlCode: <p>Choose the type that is correct. ADM puts it into effect in the same way as Accept. The type you choose replaces the type of the model.</p>
+        }
+        layout {
+            sequence: 6
+            slot: contentBody
+        }
+        appearance {
+            template: @/blank-with-attributes
+            templateOptions: #DEFAULT#
+        }
+        serverSideCondition {
+            type: item=value
+            item: P8_ACTION
+            value: ACCEPT_AS
+        }
+    )
+
+    region about-revoke (
+        name: What Revoke release does
+        type: staticContent
+        source {
+            htmlCode: <p>Revoke release takes the verdict back. ADM removes the annotation that starts with <code>kb.</code> and sets the tag <code>needs-review</code>. The tag <code>category</code> stays.</p>
+        }
+        layout {
+            sequence: 7
+            slot: contentBody
+        }
+        appearance {
+            template: @/blank-with-attributes
+            templateOptions: #DEFAULT#
+        }
+        serverSideCondition {
+            type: item=value
+            item: P8_ACTION
+            value: REVOKE
+        }
+    )
+
+    region footer (
+        name: Footer
+        type: staticContent
+        layout {
+            sequence: 20
+            slot: dialogFooter
+        }
+        appearance {
+            template: @/buttons-container
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    region verdict (
+        name: Verdict
+        type: staticContent
+        layout {
+            sequence: 10
+            slot: contentBody
+        }
+        appearance {
+            template: @/blank-with-attributes
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    pageItem P8_ACTION (
+        type: hidden
+        layout {
+            sequence: 20
+            region: @verdict
+            slot: regionBody
+        }
+        sessionState {
+            storage: request
+        }
+        security {
+            sessionStateProtection: checksumRequiredSessionLevel
+        }
+    )
+
+    pageItem P8_DOCUMENT_NAME (
+        type: displayOnly
+        label {
+            label: Document
+            alignment: left
+        }
+        settings {
+            sendOnPageSubmit: false
+        }
+        layout {
+            sequence: 30
+            region: @verdict
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-floating
+            templateOptions: #DEFAULT#
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    pageItem P8_DOC_TYPE (
+        type: selectList
+        label {
+            label: Accept as type
+            alignment: left
+        }
+        lov {
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select doc_type as d
+                     , doc_type as r
+                  from hkd_ai_doc_types
+                 order by sort_order
+                ```
+            nullDisplayValue: - Choose a type -
+        }
+        layout {
+            sequence: 60
+            region: @verdict
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/required-floating
+            templateOptions: #DEFAULT#
+        }
+        validation {
+            valueRequired: true
+        }
+        sessionState {
+            storage: request
+        }
+        serverSideCondition {
+            type: item=value
+            item: P8_ACTION
+            value: ACCEPT_AS
+        }
+    )
+
+    pageItem P8_MODEL_TYPE (
+        type: displayOnly
+        label {
+            label: Type of the model
+            alignment: left
+        }
+        settings {
+            sendOnPageSubmit: false
+        }
+        layout {
+            sequence: 40
+            region: @verdict
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-floating
+            templateOptions: #DEFAULT#
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    pageItem P8_REASON (
+        type: displayOnly
+        label {
+            label: Reason of the model
+            alignment: left
+        }
+        settings {
+            sendOnPageSubmit: false
+        }
+        layout {
+            sequence: 50
+            region: @verdict
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-floating
+            templateOptions: #DEFAULT#
+        }
+        sessionState {
+            storage: request
+        }
+    )
+
+    pageItem P8_RESULT_ID (
+        type: hidden
+        layout {
+            sequence: 10
+            region: @verdict
+            slot: regionBody
+        }
+        sessionState {
+            storage: request
+        }
+        security {
+            sessionStateProtection: checksumRequiredSessionLevel
+        }
+    )
+
+    button accept (
+        buttonName: ACCEPT
+        label: Accept
+        layout {
+            sequence: 20
+            region: @footer
+            slot: next
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+        }
+        behavior {
+            warnOnUnsavedChanges: doNotCheck
+        }
+        serverSideCondition {
+            type: item=value
+            item: P8_ACTION
+            value: ACCEPT
+        }
+    )
+
+    button accept-as (
+        buttonName: ACCEPT_AS
+        label: Accept as type
+        layout {
+            sequence: 30
+            region: @footer
+            slot: next
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+        }
+        behavior {
+            warnOnUnsavedChanges: doNotCheck
+        }
+        serverSideCondition {
+            type: item=value
+            item: P8_ACTION
+            value: ACCEPT_AS
+        }
+    )
+
+    button cancel (
+        buttonName: CANCEL
+        label: Cancel
+        layout {
+            sequence: 10
+            region: @footer
+            slot: close
+        }
+        appearance {
+            buttonTemplate: @/text
+            templateOptions: #DEFAULT#
+        }
+        behavior {
+            action: definedByDynamicAction
+        }
+    )
+
+    button revoke (
+        buttonName: REVOKE
+        label: Revoke release
+        layout {
+            sequence: 40
+            region: @footer
+            slot: next
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+        }
+        behavior {
+            warnOnUnsavedChanges: doNotCheck
+        }
+        serverSideCondition {
+            type: item=value
+            item: P8_ACTION
+            value: REVOKE
+        }
+    )
+
+    dynamicAction cancel (
+        name: Cancel
+        execution {
+            sequence: 10
+        }
+        when {
+            event: click
+            selectionType: button
+            button: @cancel
+        }
+
+        action native-dialog-cancel (
+            action: cancelDialog
+            execution {
+                sequence: 10
+                fireOnInit: false
+            }
+        )
+
+    )
+
+    validation verdict-open (
+        name: Verdict is open for this action
+        execution {
+            sequence: 10
+        }
+        validation {
+            type: functionBodyReturningBoolean
+            plsqlFunctionBody:
+                ```plsql
+                declare
+                    l_status hkd_ai_latest_v.status%type;
+                begin
+                    select status
+                      into l_status
+                      from hkd_ai_latest_v
+                     where result_id = :P8_RESULT_ID
+                       and document_id in (
+                             select m.document_id
+                               from adm_my_documents_v m
+                           );
+                
+                    return case
+                             when :P8_ACTION in ('ACCEPT', 'ACCEPT_AS') then l_status in ('NEEDS_REVIEW', 'REVOKED')
+                             when :P8_ACTION = 'REVOKE' then l_status in ('RELEASED', 'ACCEPTED')
+                             else false
+                           end;
+                exception
+                    when no_data_found then
+                        return false;
+                end;
+                ```
+        }
+        error {
+            errorMessage: Somebody changed this verdict in the meantime. Close this window and refresh the report.
+        }
+    )
+
+    process accept (
+        name: Accept
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                begin
+                    hkd_ai_api.accept(p_result_id => :P8_RESULT_ID);
+                exception
+                    when others then
+                        adm_error.log_error(p_scope => 'hkd page 8: accept');
+                        if adm_error.is_adm_error(sqlcode) then
+                            raise;
+                        end if;
+                        raise_application_error(-20731, 'The verdict could not be accepted. Close this window, refresh the report and try again.');
+                end;
+                ```
+        }
+        execution {
+            sequence: 10
+        }
+        successMessage {
+            successMessage: Verdict accepted. The document now has the type of the model.
+        }
+        advanced {
+            executionMappingIdentifier: 110285439557598225
+        }
+        serverSideCondition {
+            whenButtonPressed: @accept
+        }
+    )
+
+    process accept-as (
+        name: Accept as type
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                begin
+                    hkd_ai_api.accept(
+                        p_result_id => :P8_RESULT_ID
+                      , p_doc_type  => :P8_DOC_TYPE
+                    );
+                exception
+                    when others then
+                        adm_error.log_error(p_scope => 'hkd page 8: accept as');
+                        if adm_error.is_adm_error(sqlcode) then
+                            raise;
+                        end if;
+                        raise_application_error(-20731, 'The verdict could not be accepted. Close this window, refresh the report and try again.');
+                end;
+                ```
+        }
+        execution {
+            sequence: 20
+        }
+        successMessage {
+            successMessage: Verdict accepted as type &P8_DOC_TYPE.
+        }
+        advanced {
+            executionMappingIdentifier: 110285568929598225
+        }
+        serverSideCondition {
+            whenButtonPressed: @accept-as
+        }
+    )
+
+    process close-dialog (
+        name: Close Dialog
+        type: closeDialog
+        execution {
+            sequence: 40
+        }
+        advanced {
+            executionMappingIdentifier: 110285704336598225
+        }
+        serverSideCondition {
+            type: requestIsContainedInValue
+            value: ACCEPT,ACCEPT_AS,REVOKE
+        }
+    )
+
+    process load-verdict (
+        name: Load verdict
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                begin
+                    select v.document_name
+                         , v.doc_type
+                         , v.reason
+                      into :P8_DOCUMENT_NAME
+                         , :P8_MODEL_TYPE
+                         , :P8_REASON
+                      from hkd_ai_latest_v v
+                     where v.result_id = :P8_RESULT_ID
+                       and v.document_id in (
+                             select m.document_id
+                               from adm_my_documents_v m
+                           );
+                exception
+                    when no_data_found then
+                        raise_application_error(-20732, 'This verdict is no longer the current one, or you may not see its document. Close this window and refresh the report.');
+                end;
+                ```
+        }
+        execution {
+            sequence: 10
+            point: beforeHeader
+        }
+        advanced {
+            executionMappingIdentifier: 110285823781598226
+        }
+    )
+
+    process revoke (
+        name: Revoke release
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                declare
+                    l_document_id number;
+                begin
+                    select document_id
+                      into l_document_id
+                      from hkd_ai_latest_v
+                     where result_id = :P8_RESULT_ID;
+                
+                    hkd_ai_api.revoke_release(p_document_id => l_document_id);
+                exception
+                    when others then
+                        adm_error.log_error(p_scope => 'hkd page 8: revoke');
+                        if adm_error.is_adm_error(sqlcode) then
+                            raise;
+                        end if;
+                        raise_application_error(-20731, 'The release could not be revoked. Close this window, refresh the report and try again.');
+                end;
+                ```
+        }
+        execution {
+            sequence: 30
+        }
+        successMessage {
+            successMessage: Release revoked. The document waits for review again.
+        }
+        advanced {
+            executionMappingIdentifier: 110285677154598225
+        }
+        serverSideCondition {
+            whenButtonPressed: @revoke
+        }
+    )
+
+)
+

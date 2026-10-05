@@ -78,12 +78,20 @@ The staged scripts for lessons 2 to 6 are generated from
 `db/04_hkd_worker_api.pkb` by taking features away, so change the demo package first and regenerate. Run the scripts from the
 `tutorial/` directory.
 
+## The AI classification course
+
+`ai/` holds the scripts and the sample files of the docs course "Classify uploads with an LLM", which adds an AI classifier to the demo as a workflow.
+It needs the finished demo (`make db-install`), the AI Pack, and an APEX web credential named `OPENAI`. `ai/00_precheck.sql` checks all three.
+The classifier is the package `hkd_ai_api`; the workflow registry names it in the column `handler`, so the worker calls it without a change to `hkd_worker_api`.
+`ai/samples/` holds the generators of the invented sample PDFs and of the base64 load script `00_load_pdfs.sql`. Run the scripts from the `ai/` directory.
+`ai/99_hkd_ai_uninstall.sql` removes what the course added and switches the workflow `INTAKE_CLASSIFY` on again.
+
 ## Files
 
 | File | Purpose |
 | --- | --- |
 | `db/00_dba_grants.sql` | AQ privileges, run once by a DBA |
-| `db/01_hkd_tables.sql` | workflow registry, blocked extensions, run log, refusals, outbox |
+| `db/01_hkd_tables.sql` | workflow registry (with the `handler` column), blocked extensions, run log, refusals, outbox |
 | `db/02_hkd_queue.sql` | payload type, queue table, queue (retries, exception queue) |
 | `db/03_hkd_hook_api.*` | **the hooks**: guard + enqueue |
 | `db/04_hkd_worker_api.*` | **the worker**: dequeue loop, the four workflows, AQ notification callback, requeue |

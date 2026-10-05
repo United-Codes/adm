@@ -373,9 +373,12 @@ create or replace package body hkd_worker_api as
   )
   as
     l_outcome t_outcome;
+    l_status  hkd_workflow_runs.status%type;
+    l_summary hkd_workflow_runs.summary%type;
   begin
     for r_wf in (
       select workflow_code
+           , handler
         from hkd_workflows
        where hook_key     = p_event.hook_key
          and enabled_flag = 'Y'
@@ -383,12 +386,21 @@ create or replace package body hkd_worker_api as
     ) loop
       act_as_system;
 
-      l_outcome := case r_wf.workflow_code
-                     when 'INTAKE_CLASSIFY'  then wf_intake_classify(p_event)
-                     when 'DUPLICATE_SCAN'   then wf_duplicate_scan(p_event)
-                     when 'VERSION_DIGEST'   then wf_version_digest(p_event)
-                     when 'FOLDER_BLUEPRINT' then wf_folder_blueprint(p_event)
-                   end;
+      if r_wf.handler is not null then
+        -- A workflow that lives in a package of its own. The row names the procedure; an
+        -- exception it raises propagates like one from a built-in workflow does.
+        execute immediate 'begin ' || dbms_assert.qualified_sql_name(r_wf.handler) || '(:event, :status, :summary); end;'
+          using in p_event, out l_status, out l_summary;
+        l_outcome := outcome(l_status, l_summary);
+      else
+        l_outcome := case r_wf.workflow_code
+                       when 'INTAKE_CLASSIFY'  then wf_intake_classify(p_event)
+                       when 'DUPLICATE_SCAN'   then wf_duplicate_scan(p_event)
+                       when 'VERSION_DIGEST'   then wf_version_digest(p_event)
+                       when 'FOLDER_BLUEPRINT' then wf_folder_blueprint(p_event)
+                       else outcome('FAILED', 'The workflow has no handler and is not built in')
+                     end;
+      end if;
 
       record_run(p_event, p_delivery, r_wf.workflow_code, l_outcome);
     end loop;

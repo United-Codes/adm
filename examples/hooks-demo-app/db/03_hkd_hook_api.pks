@@ -50,5 +50,22 @@ create or replace package hkd_hook_api as
     p_folder_id in adm_folders.folder_id%type
   );
 
+  /**
+   * Queues one event for the worker. The three hooks use it, and so can code of your own that
+   * wants a workflow to run for a document without a new upload: register a workflow whose
+   * hook_key is the key you pass here.
+   *
+   * @param p_hook_key    The event name, matched against hkd_workflows.hook_key
+   * @param p_document_id The document the event is about, if any
+   * @param p_version_id  The version the event is about, if any
+   * @param p_folder_id   The folder the event is about, if any
+   */
+  procedure enqueue_event (
+    p_hook_key    in varchar2
+  , p_document_id in number default null
+  , p_version_id  in number default null
+  , p_folder_id   in number default null
+  );
+
 end hkd_hook_api;
 /

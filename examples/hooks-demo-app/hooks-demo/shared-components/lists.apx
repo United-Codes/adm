@@ -62,6 +62,21 @@ list navigation-bar (
 list navigation-menu (
     name: Navigation Menu
 
+    entry ai-review (
+        label: AI Review
+        icon {
+            imageIconCssClasses: fa-eye
+        }
+        layout {
+            sequence: 35
+        }
+        link {
+            target: {
+                page: 7
+            }
+        }
+    )
+
     entry code (
         label: How It Works: The Code
         icon {

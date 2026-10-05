@@ -1,0 +1,11 @@
+file_name,corpus,legal,hr,scanned,note
+contract_nordlicht_supply.pdf,contracts,Y,Y,N,"supply agreement, notice period 90 days"
+contract_alpenwerk_maintenance.pdf,contracts,Y,Y,N,"maintenance contract, notice period 30 days"
+contract_ferrotek_framework.pdf,contracts,Y,Y,N,"framework agreement, notice period 6 months"
+contract_helios_distribution.pdf,contracts,Y,N,N,"exclusive distribution, notice 12 months, Legal only"
+scan_nordlicht_amendment.pdf,contracts,Y,Y,Y,scanned amendment: notice period 90 -> 120 days
+travel_policy_2025.pdf,policies,Y,Y,N,"travel policy, valid until 2025-12-31"
+travel_policy_2026.pdf,policies,Y,Y,N,"travel policy, valid from 2026-01-01, other numbers"
+remote_work_policy.pdf,policies,Y,Y,N,"remote work, 2 weeks notice for the arrangement"
+employee_handbook.pdf,policies,Y,Y,N,"handbook, employee notice periods"
+salary_bands.pdf,policies,N,Y,N,"salary bands, HR only"

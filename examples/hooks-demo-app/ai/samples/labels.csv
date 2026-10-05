@@ -1,0 +1,14 @@
+file_name,expected_type,note
+inv_ferrotek_1042.pdf,invoice,clean invoice
+inv_nordlicht_2207.pdf,invoice,"clean invoice, other layout"
+supply_agreement_ferrotek.pdf,contract,"clean contract, version 1"
+supply_agreement_ferrotek_v2.pdf,contract,"the same contract after an amendment, version 2"
+quote_alpenwerk_q5531.pdf,quote,"looks like an invoice: items, totals, a payment term"
+datasheet_pump_x200.pdf,datasheet,product data
+letter_employment_change.pdf,hr,personal letter to an employee
+scan_fax_amendment.pdf,contract,"image only: a scanned fax, no text layer"
+proforma_alpenwerk_pf5531.pdf,quote,"a pro forma invoice: looks like an invoice but is for prepayment, not for booking"
+reminder_ferrotek_1042.pdf,other,a payment reminder about an earlier invoice
+delivery_note_nordlicht_ls2207.pdf,other,"a delivery note: goods, no prices"
+memo_offsite_menu.pdf,other,carries an instruction aimed at the classifier
+note_parking_rules.pdf,other,company notice that is none of the types

@@ -33,6 +33,7 @@ begin
     , name          varchar2(100 char)  not null
     , description   varchar2(1000 char) not null
     , enabled_flag  varchar2(1 char)    default on null 'Y' not null
+    , handler       varchar2(130 char)
     , constraint hkd_workflows_pk primary key (workflow_code)
     , constraint hkd_workflows_enabled_ck check (enabled_flag in ('Y', 'N'))
     )
@@ -101,6 +102,23 @@ begin
 end;
 /
 
+-- A schema that installed the demo before the handler column existed keeps its table, so the
+-- column is added here. ensure_table above only creates a table that is missing.
+declare
+  l_exists number;
+begin
+  select count(*)
+    into l_exists
+    from user_tab_columns
+   where table_name  = 'HKD_WORKFLOWS'
+     and column_name = 'HANDLER';
+
+  if l_exists = 0 then
+    execute immediate 'alter table hkd_workflows add (handler varchar2(130 char))';
+  end if;
+end;
+/
+
 declare
   l_exists number;
 begin
@@ -113,6 +131,7 @@ end;
 
 comment on table hkd_workflows is 'Registry of the asynchronous workflows the worker can run for an event. Only enabled ones run.';
 comment on column hkd_workflows.hook_key is 'The ADM hook event (adm_hooks_api.c_after_*) the workflow reacts to.';
+comment on column hkd_workflows.handler is 'Optional procedure the worker calls for this workflow: (p_event in hkd_event_t, po_status out varchar2, po_summary out varchar2). Empty for the four workflows built into hkd_worker_api.';
 comment on table hkd_blocked_extensions is 'File extensions the synchronous upload guard refuses. Lowercase, without the dot.';
 comment on table hkd_rejections is 'Uploads the guard refused. Written autonomously because the rejection rolls the upload back.';
 comment on table hkd_workflow_runs is 'Outcome of each workflow for each processed queue message. status FLAGGED means it ran and found something worth a look, SKIPPED that the event was not one it applies to.';
