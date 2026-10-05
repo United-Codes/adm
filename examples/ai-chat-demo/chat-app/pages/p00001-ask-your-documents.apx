@@ -1,0 +1,79 @@
+page 1 (
+    name: Ask your documents
+    alias: ASK-YOUR-DOCUMENTS
+    title: Ask your documents
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region uc-ai-chat (
+        name: Ask your documents
+        type: plugin/ucAiChat
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--noPadding
+                t-Region--removeHeader js-removeLandmark
+                t-Region--scrollBody
+            ]
+        }
+        plugin-agent {
+            agentCode: aic_assistant
+            agentInputMapping: {"question": "#USER_MESSAGE#"}
+            sessionInitCode:
+                ```plsql
+                apex_session.attach(
+                  p_app_id     => :APP_ID,
+                  p_page_id    => :APP_PAGE_ID,
+                  p_session_id => :APP_SESSION
+                );
+                adm_context_api.establish_from_session;
+                ```
+        }
+        plugin-conversation {
+            sessionItem: P1_SESSION_ID
+            autoGenerateTitle: true
+            collectFeedback: true
+        }
+        plugin-appearance {
+            headerTitle: Ask your documents
+            welcomeMessage: Ask me anything about the contracts and policies you may read.
+            minHeight: 520px
+            thinkingAnimation: braille
+        }
+        plugin-developer {
+            debugConfig:
+                ```plsql
+                if apex_application.g_edit_cookie_session_id is not null then
+                  return '{ "show_tools": true }';
+                else
+                  return '{}';
+                end if;
+                ```
+        }
+    )
+
+    pageItem P1_SESSION_ID (
+        type: hidden
+        layout {
+            sequence: 10
+            region: @uc-ai-chat
+            slot: regionBody
+        }
+    )
+
+)
+

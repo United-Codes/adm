@@ -45,9 +45,9 @@ select e.id as execution_id
      , e.created_by
      , e.audience
   from uc_ai_agent_executions e
- where e.session_id = (select max(session_id) keep (dense_rank last order by started_at)
-                         from uc_ai_agent_executions
-                        where agent_id = (select id from uc_ai_agents where code = 'aic_assistant'))
+ where e.session_id = (select max(x.session_id) keep (dense_rank last order by x.started_at)
+                         from uc_ai_agent_executions x
+                        where x.agent_id = (select a.id from uc_ai_agents a where a.code = 'aic_assistant'))
  order by e.id;
 
 prompt
@@ -61,8 +61,8 @@ select m.seq
          else to_char(replace(substr(m.content, 1, 110), chr(10), ' '))
        end as what
   from uc_ai_agent_messages m
- where m.execution_id = (select max(id) from uc_ai_agent_executions
-                          where agent_id = (select id from uc_ai_agents where code = 'aic_assistant'))
+ where m.execution_id = (select max(e.id) from uc_ai_agent_executions e
+                          where e.agent_id = (select a.id from uc_ai_agents a where a.code = 'aic_assistant'))
  order by m.seq;
 
 prompt
@@ -73,17 +73,17 @@ select p.document
      , replace(substr(p.text, 1, 70), chr(10), ' ') as text
   from uc_ai_agent_messages m
   cross apply json_table(m.tool_output, '$.passages[*]'
-         columns (document       varchar2(200) path '$.document'
-                , score          number        path '$.score'
-                , matched_chunks number        path '$.matched_chunks'
-                , text           clob          path '$.text')) p
+         columns (document       varchar2(200 char) path '$.document'
+                , score          number             path '$.score'
+                , matched_chunks number             path '$.matched_chunks'
+                , text           clob               path '$.text')) p
  where m.role = 'tool_result'
    and m.id = (select max(x.id)
                  from uc_ai_agent_messages x
                 where x.role = 'tool_result'
                   and json_value(x.tool_output, '$.status') = 'ok'
                   and x.execution_id in (select e.id from uc_ai_agent_executions e
-                                          where e.agent_id = (select id from uc_ai_agents where code = 'aic_assistant')))
+                                          where e.agent_id = (select a.id from uc_ai_agents a where a.code = 'aic_assistant')))
  order by p.score desc;
 
 prompt
@@ -94,7 +94,7 @@ select m.tool_status
   from uc_ai_agent_messages m
  where m.role = 'tool_result'
    and m.execution_id in (select e.id from uc_ai_agent_executions e
-                           where e.agent_id = (select id from uc_ai_agents where code = 'aic_assistant'))
- group by m.tool_status, json_value(m.tool_output, '$.status')
- order by 3 desc;
+                           where e.agent_id = (select a.id from uc_ai_agents a where a.code = 'aic_assistant'))
+ group by m.tool_status, result_status
+ order by n desc;
 set feedback on

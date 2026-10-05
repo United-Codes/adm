@@ -26,7 +26,7 @@ begin
   -- Back to the first state: the second tool does not exist yet.
   delete from uc_ai_tools where code = 'AIC_SEARCH_POLICIES';
 
-  l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+  l_tool_id := uc_ai_tools_api.merge_tool_from_schema( -- @dblinter ignore(g-2135): merge_tool_from_schema is a function, and this script does not need the id
     p_tool_code     => 'AIC_SEARCH_CONTRACTS'
   , p_description   => 'Search the contracts of the company (supply, maintenance, framework and distribution '
                     || 'agreements and their amendments). Returns the best matching passages with the '
@@ -75,11 +75,13 @@ Rules:
     "g_apex_web_credential": "OPENAI"
   }';
 
-  select count(*) into l_exists from uc_ai_prompt_profiles where code = 'AIC_ASSISTANT' and version = 1;
+  select case when exists (select 1 from uc_ai_prompt_profiles p where p.code = 'AIC_ASSISTANT' and p.version = 1) then 1 else 0 end
+    into l_exists
+    from dual;
 
   if l_exists = 0 then
     -- create_prompt_profile makes a draft unless you pass the status
-    l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile( -- @dblinter ignore(g-2135): create_prompt_profile is a function, and this script does not need the id
       p_code                   => 'AIC_ASSISTANT'
     , p_description            => 'Demo: answers from the contracts and policies of Example Works GmbH'
     , p_system_prompt_template => l_system_prompt

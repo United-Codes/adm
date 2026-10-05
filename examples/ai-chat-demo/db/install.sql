@@ -7,7 +7,7 @@
 -- 00_precheck.sql checks that. Re-runnable: data that exists is left alone, packages and
 -- registrations are replaced. 99_aic_teardown.sql removes all of it again.
 --
--- Embeds about 3,000 tokens and reads one scanned page with a model (step 3b): fractions of a cent.
+-- Embeds about 2,000 tokens and reads one scanned page with a model: fractions of a cent.
 -- Every upload passes p_run_hooks => false, so no ADM hook runs on the sample files.
 --
 -- The lesson scripts (05, 09 to 16) are not part of the install. Run them one by one.

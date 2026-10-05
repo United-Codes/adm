@@ -109,7 +109,7 @@ create or replace package body aic_rag_tools_api as
 
   function parse_query (
     p_parameters in clob
-  , po_max_sources out nocopy number
+  , po_max_sources out nocopy number -- @dblinter ignore(g-7440): the package keeps no state, so the max_sources value comes back through the out parameter beside the query text
   ) return varchar2
   as
     l_json json_object_t;
@@ -129,7 +129,7 @@ create or replace package body aic_rag_tools_api as
     end if;
     return null;
   exception
-    when others then
+    when others then -- @dblinter ignore(g-5040): whatever is wrong with the parameters, the result is the same: a missing query, and search() tells the model what to do
       -- not JSON at all: treated like a missing query, search() says what to do
       return null;
   end parse_query;

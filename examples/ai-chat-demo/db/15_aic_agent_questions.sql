@@ -16,6 +16,9 @@
 -- With an argument the default_score_threshold of both collections is set for the run and put back
 -- at the end.
 
+-- @dblinter ignore(g-5010): a tutorial script prints its results with dbms_output on
+-- purpose, so the reader sees them directly in SQLcl.
+
 define aic_threshold = '&1'
 set define on
 set verify off
@@ -26,8 +29,8 @@ alter session set nls_numeric_characters = '.,';
 
 declare
   c_threshold constant varchar2(20 char) := '&aic_threshold';
-  type t_orig is table of clob index by varchar2(30);
-  l_orig        t_orig;
+  type t_orig_map is table of clob index by varchar2(30 char);
+  l_orig_map    t_orig_map;
   l_result      json_object_t;
   l_t           timestamp;
   l_exec_id     number;
@@ -46,32 +49,37 @@ declare
   l_n_fact      number := 0;
   l_n_exp       number := 0;
   l_secs_one    number;
-  l_cfg         json_object_t;
 
-  procedure set_threshold (p_on in boolean) is
+  procedure set_threshold (
+    p_on       in     boolean
+  , pio_orig_map in out nocopy t_orig_map
+  ) is
+    l_cfg json_object_t;
   begin
     adm_context_api.system_login;
+    <<collection_loop>>
     for c in (select rag_collection_id, collection_name, config_json from adm_ai_rag_collections where collection_name in ('aic_contracts', 'aic_policies')) loop
       if p_on then
-        l_orig(c.collection_name) := c.config_json;
+        pio_orig_map(c.collection_name) := c.config_json;
         l_cfg := json_object_t.parse(c.config_json);
         l_cfg.put('default_score_threshold', to_number(c_threshold));
         adm_ai_rag_api.update_rag_collection(p_rag_collection_id => c.rag_collection_id, p_config_json => l_cfg.to_clob);
       else
-        adm_ai_rag_api.update_rag_collection(p_rag_collection_id => c.rag_collection_id, p_config_json => l_orig(c.collection_name));
+        adm_ai_rag_api.update_rag_collection(p_rag_collection_id => c.rag_collection_id, p_config_json => pio_orig_map(c.collection_name));
       end if;
-    end loop;
+    end loop collection_loop;
     commit;
   end set_threshold;
 begin
   if lower(c_threshold) != 'default' and c_threshold is not null then
-    set_threshold(true);
+    set_threshold(true, l_orig_map);
   end if;
 
-  dbms_output.put_line('default_score_threshold: ' || nvl(nullif(c_threshold, ''), 'default (0.5)'));
-  dbms_output.put_line(rpad('Q', 3) || rpad('asked as', 11) || rpad('retrieved', 10) || rpad('cited', 7) || rpad('fact', 6)
+  sys.dbms_output.put_line('default_score_threshold: ' || nvl(c_threshold, 'default (0.5)'));
+  sys.dbms_output.put_line(rpad('Q', 3) || rpad('asked as', 11) || rpad('retrieved', 10) || rpad('cited', 7) || rpad('fact', 6)
     || rpad('tools', 6) || rpad('in', 7) || rpad('out', 6) || rpad('sec', 6) || 'search texts the model chose');
-  for q in (select * from aic_questions order by q_no) loop
+  <<question_loop>>
+  for q in (select q_no, question, collection_name, expected_doc, expected_fact, ask_as from aic_questions order by q_no) loop
     l_t := systimestamp;
     l_result  := aic_agent_api.run_as(q.ask_as, 'aic_assistant', q.question);
     l_secs_one := round(extract(second from (systimestamp - l_t)) + 60 * extract(minute from (systimestamp - l_t)), 1);
@@ -81,7 +89,7 @@ begin
     select listagg(distinct d.document, ',') within group (order by d.document)
       into l_docs
       from uc_ai_agent_messages m
-     cross apply json_table(m.tool_output, '$.passages[*]' columns (document varchar2(200) path '$.document')) d
+     cross apply json_table(m.tool_output, '$.passages[*]' columns (document varchar2(200 char) path '$.document')) d
      where m.execution_id = l_exec_id and m.role = 'tool_result';
 
     select listagg(json_value(m.tool_input, '$.query'), ' | ') within group (order by m.seq)
@@ -107,27 +115,27 @@ begin
     l_tools := l_tools + l_result.get_number('tool_calls_count');
     l_secs  := l_secs + l_secs_one;
 
-    dbms_output.put_line(rpad(q.q_no, 3) || rpad(q.ask_as, 11) || rpad(l_retrieved, 10) || rpad(l_cited, 7) || rpad(l_fact, 6)
+    sys.dbms_output.put_line(rpad(q.q_no, 3) || rpad(q.ask_as, 11) || rpad(l_retrieved, 10) || rpad(l_cited, 7) || rpad(l_fact, 6)
       || rpad(l_result.get_number('tool_calls_count'), 6)
       || rpad(l_result.get_object('usage').get_number('prompt_tokens'), 7)
       || rpad(l_result.get_object('usage').get_number('completion_tokens'), 6)
       || rpad(l_secs_one, 6) || l_queries);
-    dbms_output.put_line('     A: ' || replace(substr(l_answer, 1, 170), chr(10), ' '));
-  end loop;
+    sys.dbms_output.put_line('     A: ' || replace(substr(l_answer, 1, 170), chr(10), ' '));
+  end loop question_loop;
 
-  dbms_output.put_line('');
-  dbms_output.put_line('retrieved ' || l_n_ret || ' of ' || l_n_exp || ', cited ' || l_n_cit || ' of ' || l_n_exp
+  sys.dbms_output.put_line(null);
+  sys.dbms_output.put_line('retrieved ' || l_n_ret || ' of ' || l_n_exp || ', cited ' || l_n_cit || ' of ' || l_n_exp
     || ', fact right ' || l_n_fact || ' of 10');
-  dbms_output.put_line('total: ' || l_tools || ' tool calls, ' || l_in || ' tokens in, ' || l_out || ' tokens out, ' || round(l_secs) || ' s');
+  sys.dbms_output.put_line('total: ' || l_tools || ' tool calls, ' || l_in || ' tokens in, ' || l_out || ' tokens out, ' || round(l_secs) || ' s');
 
   if lower(c_threshold) != 'default' and c_threshold is not null then
-    set_threshold(false);
-    dbms_output.put_line('(default_score_threshold put back)');
+    set_threshold(false, l_orig_map);
+    sys.dbms_output.put_line('(default_score_threshold put back)');
   end if;
 exception
   when others then
-    if lower(c_threshold) != 'default' and c_threshold is not null and l_orig.count > 0 then
-      set_threshold(false);
+    if lower(c_threshold) != 'default' and c_threshold is not null and l_orig_map.count > 0 then
+      set_threshold(false, l_orig_map);
     end if;
     raise;
 end;

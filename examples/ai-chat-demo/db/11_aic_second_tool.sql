@@ -1,5 +1,5 @@
--- The follow-up the first tool cannot answer, then the second tool. Run it in a FRESH SQLcl
--- session. Costs three agent runs (about 1,000 to 4,000 tokens each).
+-- The follow-up the first tool cannot answer, then the second tool. run_as creates the APEX
+-- session itself, so any session works. Costs three agent runs (about 1,000 to 4,000 tokens each).
 --
 --   sql -name <connection> @11_aic_second_tool.sql
 --
@@ -12,6 +12,9 @@
 -- Everything runs as AIC_LEGAL. Legal may read both the contracts and the policies except the
 -- salary bands.
 
+-- @dblinter ignore(g-5010): a tutorial script prints its results with dbms_output on
+-- purpose, so the reader sees them directly in SQLcl.
+
 set define off
 set serveroutput on
 set long 4000
@@ -20,28 +23,29 @@ alter session set nls_numeric_characters = '.,';
 set linesize 220
 
 declare
-  l_result  json_object_t;
   l_session varchar2(100 char);
-  l_t       timestamp;
   l_tool_id uc_ai_tools.id%type;
 
-  procedure ask (
-    p_label    in varchar2
-  , p_question in varchar2
-  )
+  function ask (
+    p_label      in varchar2
+  , p_question   in varchar2
+  , p_session_id in varchar2
+  ) return varchar2
   as
+    l_result json_object_t;
+    l_t      timestamp;
   begin
     l_t := systimestamp;
-    l_result := aic_agent_api.run_as('AIC_LEGAL', 'aic_assistant', p_question, l_session);
-    l_session := l_result.get_string('session_id');
-    dbms_output.put_line('--- ' || p_label);
-    dbms_output.put_line('Q: ' || p_question);
-    dbms_output.put_line('A: ' || l_result.get_clob('final_message'));
-    dbms_output.put_line('   tool calls ' || l_result.get_number('tool_calls_count')
+    l_result := aic_agent_api.run_as('AIC_LEGAL', 'aic_assistant', p_question, p_session_id);
+    sys.dbms_output.put_line('--- ' || p_label);
+    sys.dbms_output.put_line('Q: ' || p_question);
+    sys.dbms_output.put_line('A: ' || l_result.get_clob('final_message'));
+    sys.dbms_output.put_line('   tool calls ' || l_result.get_number('tool_calls_count')
       || ', tokens ' || l_result.get_object('usage').get_number('prompt_tokens')
       || ' in / ' || l_result.get_object('usage').get_number('completion_tokens')
       || ' out, ' || round(extract(second from (systimestamp - l_t)), 1) || ' s');
-    dbms_output.put_line('');
+    sys.dbms_output.put_line(null);
+    return l_result.get_string('session_id');
   end ask;
 begin
   -- back to the first state, in case this script ran before
@@ -50,11 +54,11 @@ begin
 
   l_session := uc_ai_agents_api.generate_session_id;
 
-  ask('1a. a contract question', 'What notice period applies to the Alpenwerk maintenance contract?');
-  ask('1b. the follow-up: one tool', 'And what does our travel policy say about hotel costs?');
+  l_session := ask('1a. a contract question', 'What notice period applies to the Alpenwerk maintenance contract?', l_session);
+  l_session := ask('1b. the follow-up: one tool', 'And what does our travel policy say about hotel costs?', l_session);
 
   -- 2. the second tool, same tag
-  l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+  l_tool_id := uc_ai_tools_api.merge_tool_from_schema( -- @dblinter ignore(g-2135): merge_tool_from_schema is a function, and this script does not need the id
     p_tool_code     => 'AIC_SEARCH_POLICIES'
   , p_description   => 'Search the internal policies of the company (travel policy in all its versions, remote '
                     || 'work, employee handbook, salary bands). Returns the best matching passages with the '
@@ -75,11 +79,11 @@ begin
   , p_code_mode_access => 'direct'
   );
   commit;
-  dbms_output.put_line('(registered AIC_SEARCH_POLICIES with the tag aic_demo; the profile was not changed)');
-  dbms_output.put_line('');
+  sys.dbms_output.put_line('(registered AIC_SEARCH_POLICIES with the tag aic_demo; the profile was not changed)');
+  sys.dbms_output.put_line(null);
 
   -- 3. the same follow-up, same conversation
-  ask('3. the follow-up again: two tools', 'And what does our travel policy say about hotel costs?');
+  l_session := ask('3. the follow-up again: two tools', 'And what does our travel policy say about hotel costs?', l_session);
 end;
 /
 
@@ -101,8 +105,8 @@ select c.seq
    and r.role         = 'tool_result'
    and r.seq          = c.seq + 1
  where c.role = 'tool_call'
-   and c.session_id = (select max(session_id) keep (dense_rank last order by started_at)
-                         from uc_ai_agent_executions
-                        where agent_id = (select id from uc_ai_agents where code = 'aic_assistant'))
+   and c.session_id = (select max(x.session_id) keep (dense_rank last order by x.started_at)
+                         from uc_ai_agent_executions x
+                        where x.agent_id = (select a.id from uc_ai_agents a where a.code = 'aic_assistant'))
  order by c.execution_id, c.seq;
 set feedback on

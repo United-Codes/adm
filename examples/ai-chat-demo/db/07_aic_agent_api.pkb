@@ -29,10 +29,9 @@ create or replace package body aic_agent_api as
     adm_context_api.system_user_login(p_username => p_username);
 
     -- 3. the agent
-    select count(*)
+    select case when exists (select 1 from uc_ai_agent_executions x where x.session_id = p_session_id) then 1 else 0 end
       into l_is_followup
-      from uc_ai_agent_executions
-     where session_id = p_session_id;
+      from dual;
 
     if l_is_followup > 0 then
       l_result := uc_ai_agents_api.execute_agent(
@@ -53,11 +52,11 @@ create or replace package body aic_agent_api as
     return l_result;
   exception
     when others then
-      apex_debug.error(c_scope_prefix || 'run_as: %s', sqlerrm);
+      apex_debug.error(c_scope_prefix || 'run_as: %s - %s', sqlerrm, sys.dbms_utility.format_error_backtrace);
       begin
         apex_session.delete_session;
       exception
-        when others then
+        when others then -- @dblinter ignore(g-5040): a failure to delete the session must not hide the error that is raised below
           null;
       end;
       raise;

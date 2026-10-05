@@ -1,0 +1,19 @@
+appComputation ai-user-role (
+    itemName: AI_USER_ROLE
+    execution {
+        sequence: 10
+        point: afterAuthentication
+    }
+    computation {
+        type: sqlQuerySingleValue
+        sqlQuery:
+            ```sql
+            select role_name
+              from adm_users ur
+              join adm_roles r on ur.role_id = r.role_id
+             where ur.username = upper(:APP_USER)
+               and is_active = 'Y'
+            ```
+    }
+)
+

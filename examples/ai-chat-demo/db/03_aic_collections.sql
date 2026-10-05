@@ -13,13 +13,14 @@
 --   * llm_text_extraction  contracts only, and only for files annotated aic.scan = Y
 -- Creating a collection only stores the configuration. Nothing is embedded until step 4.
 
+-- @dblinter ignore(g-5010): a tutorial script prints its results with dbms_output on
+-- purpose, so the reader sees them directly in SQLcl.
+
 set define off
 set serveroutput on
 set feedback off
 
 declare
-  l_id number;
-
   procedure ensure_collection (
     p_name        in varchar2
   , p_description in varchar2
@@ -27,13 +28,16 @@ declare
   , p_scan_extraction in boolean default false
   )
   as
-    l_count  number;
+    l_exists number;
+    l_id     number;
     l_config clob;
     l_scan   varchar2(1000 char);
   begin
-    select count(*) into l_count from adm_ai_rag_collections where collection_name = p_name;
-    if l_count > 0 then
-      dbms_output.put_line('  collection exists:  ' || p_name);
+    select case when exists (select 1 from adm_ai_rag_collections c where c.collection_name = p_name) then 1 else 0 end
+      into l_exists
+      from dual;
+    if l_exists > 0 then
+      sys.dbms_output.put_line('  collection exists:  ' || p_name);
       return;
     end if;
 
@@ -77,7 +81,7 @@ declare
     , p_description     => p_description
     , p_config_json     => l_config
     );
-    dbms_output.put_line('  collection created: ' || p_name || ' (id ' || l_id || ')');
+    sys.dbms_output.put_line('  collection created: ' || p_name || ' (id ' || l_id || ')');
   end ensure_collection;
 begin
   adm_context_api.system_login;

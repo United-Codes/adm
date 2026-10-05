@@ -1,0 +1,69 @@
+app AIC-CHAT (
+    name: ADM AI Chat Demo
+    logo {
+        type: text
+        text: ADM AI Chat Demo
+    }
+    navigation {
+        homeUrl: {
+            page: 1
+        }
+        loginUrl: {
+            page: LOGIN
+        }
+    }
+    navigationMenu {
+        listTemplate: @/side-navigation-menu
+        templateOptions: [
+            #DEFAULT#
+            t-TreeNav--styleA
+            js-navCollapsed--hidden
+        ]
+        list: @navigation-menu
+    }
+    navigationBar {
+        list: @navigation-bar
+        listTemplate: @/navigation-bar
+        templateOptions: #DEFAULT#
+    }
+    userInterface {
+        currentTheme: @universal-theme
+        globalPage: 0
+        addBuiltWithApexToFooter: false
+    }
+    appFormatMasks {
+        date: DS
+        timestamp: DS
+        timestampTimeZone: DS
+    }
+    authentication {
+        scheme: @oracle-apex-accounts
+    }
+    authorization {
+        scheme: @has-adm-account
+    }
+    security {
+        runtimeApiUsage: modifyThisApp
+    }
+    sessionStateProtection {
+        checksumSalt: 5B1C9A07D34E6F82A1C0B7E59D2F48A36E1D0C7B94A5F3E28D6B1A0C47E95F3D
+    }
+    databaseSession {
+        initPlsqlCode: adm_context_api.establish_from_session;
+        cleanupPlsqlCode: adm_context_api.clear_context;
+    }
+    reportPrinting {
+        type: useInstanceSettings
+    }
+    errorHandling {
+        errorHandlingFunctionName: adm_error.apex_error_handler
+    }
+
+    substitution APP_NAME (
+        value {
+            staticValue: ADM AI Chat Demo
+        }
+    )
+
+)
+

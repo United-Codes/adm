@@ -35,6 +35,9 @@ HEAD = """-- Step 2 of 7: loads the sample PDFs into the two group folders and s
 --
 -- Every company, person and number in the PDFs is invented.
 
+-- @dblinter ignore(g-5010): a tutorial script prints its results with dbms_output on
+-- purpose, so the reader sees them directly in SQLcl.
+
 set define off
 set serveroutput on
 set feedback off
@@ -55,7 +58,6 @@ declare
   )
   as
     l_doc_id adm_documents.document_id%type;
-    l_count  number;
   begin
     select min(document_id)
       into l_doc_id
@@ -65,7 +67,7 @@ declare
        and deleted_flag  = 'N';
 
     if l_doc_id is not null then
-      dbms_output.put_line('  already there: ' || p_name);
+      sys.dbms_output.put_line('  already there: ' || p_name);
       return;
     end if;
 
@@ -76,7 +78,7 @@ declare
     , p_file_mime_type => 'application/pdf'
     , p_run_hooks      => false
     );
-    l_loaded := l_loaded + 1;
+    l_loaded := l_loaded + 1; -- @dblinter ignore(g-7130): put is a helper of this one block, and the counter is the state of the block
 
     if p_scanned = 'Y' then
       adm_annotations_api.add_document_annotation(l_doc_id, 'aic.scan', 'Y');
@@ -91,7 +93,7 @@ declare
       );
     end if;
 
-    dbms_output.put_line('  loaded: ' || p_name || ' (document ' || l_doc_id || ')'
+    sys.dbms_output.put_line('  loaded: ' || p_name || ' (document ' || l_doc_id || ')'
       || case when p_share_group is not null then ', shared with the other group' end);
   end put;
 begin
@@ -105,7 +107,7 @@ begin
 
 TAIL = """
   commit;
-  dbms_output.put_line(l_loaded || ' file(s) loaded.');
+  sys.dbms_output.put_line(l_loaded || ' file(s) loaded.');
 end;
 /
 set feedback on
@@ -123,9 +125,9 @@ for r in rows:
     else:
         share = "l_legal_group" if r["legal"] == "Y" else "null"
     b64 = base64.b64encode((PDFS / name).read_bytes()).decode()
-    parts.append(f"\n  declare\n    l_b64 clob;\n  begin\n    dbms_lob.createtemporary(l_b64, true);\n")
+    parts.append(f"\n  declare\n    l_b64 clob;\n  begin\n    sys.dbms_lob.createtemporary(l_b64, true);\n")
     for i in range(0, len(b64), CHUNK):
-        parts.append(f"    dbms_lob.append(l_b64, '{b64[i:i + CHUNK]}');\n")
+        parts.append(f"    sys.dbms_lob.append(l_b64, '{b64[i:i + CHUNK]}');\n")
     parts.append(f"    put('{name}', {folder}, {share}, '{r['scanned']}', l_b64);\n  end;\n")
 parts.append(TAIL)
 OUT.write_text("".join(parts))
