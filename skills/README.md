@@ -1,7 +1,7 @@
 # ADM agent skills
 
 Skills that teach an AI coding agent how to write correct PL/SQL against **APEX Document
-Management (ADM) 26.1**. Drop them into a project and your agent stops guessing at ADM's API:
+Management (ADM) 26.2**. Drop them into a project and your agent stops guessing at ADM's API:
 it knows that a session needs a context first, that no ADM package commits, that file content
 is read through `adm_storage_api.get_file_content` rather than off a BLOB column, and which
 signatures are real.
@@ -82,7 +82,7 @@ also ask for one by name ("use the adm-documents skill"). Each skill is a single
 
 ## Keeping in step
 
-These describe ADM **26.1**. The authoritative reference is generated from the installed package
+These describe ADM **26.2**. The authoritative reference is generated from the installed package
 specs and is always in step with your database:
 
 - API reference — <https://united-codes.com/products/apex-document-management/docs/api/>

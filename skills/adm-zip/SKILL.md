@@ -1,126 +1,124 @@
 ---
 name: adm-zip
 description: >
-  Packing and expanding zip archives inside APEX Document Management (ADM) from PL/SQL -
-  adm_zip_api.zip_document, zip_folder and unzip_document, their size guards, and the rollback
-  the caller has to perform when a guard trips. Use whenever a task involves zipping an ADM
-  document or folder, importing a zip file into a folder tree, or bulk-downloading ADM content.
-  Read the adm-plsql skill first.
+  Packs and expands zip archives inside ADM (APEX Document Management) from PL/SQL with
+  adm_zip_api: zip_document, zip_folder, unzip_document, where the result lands, the size and
+  entry guards, and what to roll back when an extraction fails part-way. Use to zip a document
+  or folder, import a .zip into a folder tree, "unzip into folder X", or archive a case folder.
+  Not for streaming a multi-file download to a browser (the application's download dynamic
+  action does that) and not for plain uploads (see adm-documents).
+metadata:
+  version: "26.2"
 ---
 
 # Zip and unzip
 
-Needs an established context and your own `commit` — see `adm-plsql`.
+Needs an established context and your own `commit` and `rollback` - see `adm-plsql`. Both
+directions work on **stored ADM documents**: the archive is a real document, with versions, an
+audit entry and permission checks. Nothing is streamed.
 
-Everything here produces or consumes **stored ADM documents**. A zip made by `zip_folder` is a
-real document: versioned, audited, permission-checked and subject to the target folder's storage
-policy. Nothing is streamed to a browser.
+## Gotchas
 
-> Streaming a multi-file download to the user is a different job, already covered by the
-> `UNITEDCODES_DOWNLOAD_FILES_DA` dynamic action in the ADM application. Do not route that
-> through this API.
+1. **`unzip_document` has no target parameter.** It creates a folder named after the archive (name
+   without extension) in the **archive's own folder**. To expand into folder X, either create the
+   archive there (`zip_folder(p_target_folder_id => X)`) or `adm_document_api.move_document` it
+   there first. See the recipe below.
+2. **Unzipping next to the original merges into it.** An existing folder is reused. A document
+   name that is taken gets `_restored` added (`a.txt` becomes `a_restored.txt`). Nothing is
+   overwritten, and zipping the same folder twice gives `projects.zip`, then `projects_restored.zip`.
+3. **Guards trip before anything is written.** Entry count, uncompressed size, archive size and
+   every entry path are checked first, so a refused call leaves nothing behind. A **later**
+   failure leaves a partial tree in your transaction: a hook that raises for one extracted file,
+   `e_folder_exists`, or a name check. The refused document itself stays as well. Use a savepoint
+   or roll back the whole transaction. `adm_zip_api` never does either.
+4. **Hooks fire for every extracted document and for the archive** (`AFTER_NEW_FILE_UPLOAD`,
+   see `adm-hooks`). A rule such as "no .exe" therefore also fails an extraction.
+5. **`zip_folder` defaults the target to the folder's parent**, like a desktop file manager. It uses
+   the folder itself when the folder is the root, a home folder under `/users`, or the caller has
+   no EDIT right on the parent.
+6. **A complete archive is not guaranteed.** `zip_folder` silently skips trashed, archived and
+   not-viewable documents and trashed subfolders. The audit entry counts only the not-viewable
+   ones. Count what you expect first when completeness matters.
+7. **Entry paths are relative to the packed folder.** On unzip, a common top-level directory is
+   dropped. An absolute path, a drive letter or a `..` segment fails the whole call with
+   `e_invalid_name`. Zero-length entries are skipped, and empty directories are not created.
+8. **Two different permission errors.** No view right on the source raises `e_no_view_right`. For
+   the destination, `unzip_document` raises `e_no_edit_right` (the archive's folder is read-only),
+   but `zip_document` and `zip_folder` raise `e_no_permission` (from `create_document`).
+9. **Guard defaults:** `adm_zip_api.c_max_entries` (5000), `c_max_extracted_bytes` (2 GiB) and
+   `c_max_archive_bytes` (2 GiB). Only `p_max_entries` and `p_max_extracted_bytes` can be lowered.
 
-## Pack
+## Recipes
 
-```sql
-l_zip_document_id := adm_zip_api.zip_document(
-  p_document_id      => 4711
-, p_target_folder_id => null      -- defaults to the document's own folder
-);
-```
-
-`report.pdf` produces `report.zip` holding one entry under the document's own name.
-
-```sql
-l_zip_document_id := adm_zip_api.zip_folder(
-  p_folder_id        => 99
-, p_target_folder_id => null      -- defaults to the folder's PARENT, like a desktop file manager
-);
-```
-
-- Entry paths are **relative to the packed folder**, so a document in `child/grandchild` lands at
-  `child/grandchild/report.pdf` rather than carrying an absolute path.
-- Trashed subfolders, trashed documents, archived documents and **documents the caller may not
-  view** are skipped silently — the call succeeds with fewer files. If completeness matters,
-  count what you expected first.
-- Nothing is ever overwritten. Zipping the same folder twice gives you `projects.zip` and then
-  `projects_restored.zip`.
-- EDIT rights on the target folder are required, and view rights are enforced per document.
-
-## Expand
-
-```sql
-l_new_folder_id := adm_zip_api.unzip_document(p_document_id => l_zip_document_id);
-```
-
-A folder named after the archive is created **in the archive's own folder**, and the structure
-inside is recreated below it. When every entry sits under one common top-level directory, that
-directory is dropped — so an archive built by a desktop tool does not give you
-`projects/projects/...`. Existing folders are reused rather than duplicated; a taken document name
-gets a free one.
-
-Entry paths are validated before anything is written. An absolute path, a drive letter or any
-`..` segment fails the **whole call** with `adm_error.e_invalid_name` rather than being sanitized —
-an archive containing one is not a mistake.
-
-## The size guards, and the rollback they need
-
-`unzip_document` refuses an archive that is too large, because any user with EDIT rights can
-invoke it and a crafted archive can decompress to hundreds of times its own size:
-
-| Guard | Default |
-| --- | --- |
-| `p_max_entries` | `adm_zip_api.c_max_entries` — 5000 entries |
-| `p_max_extracted_bytes` | `adm_zip_api.c_max_extracted_bytes` — 2 GiB uncompressed |
-| archive size, packing and unpacking | `adm_zip_api.c_max_archive_bytes` — 2 GiB |
-
-You can lower them for a stricter policy:
-
-```sql
-l_folder_id := adm_zip_api.unzip_document(
-  p_document_id         => l_zip_document_id
-, p_max_entries         => 200
-, p_max_extracted_bytes => 50 * 1024 * 1024
-);
-```
-
-**A tripped guard is the caller's to undo.** `adm_zip_api` does not commit or roll back, so if
-`unzip_document` raises `adm_error.e_limit_exceeded` part way through, the folders and documents it
-already created are still in your transaction. Always wrap it:
+Pack a folder and unpack it into a chosen folder (replace the ids):
 
 ```sql
 declare
-  l_folder_id adm_folders.folder_id%type;
+  l_zip_id  adm_documents.document_id%type;
+  l_root_id adm_folders.folder_id%type;
 begin
   adm_context_api.system_user_login('JDOE');
 
-  l_folder_id := adm_zip_api.unzip_document(p_document_id => 4711);
+  -- create the archive straight in the destination, then expand it there
+  l_zip_id  := adm_zip_api.zip_folder(
+                 p_folder_id        => 99
+               , p_target_folder_id => 42
+               );
+  l_root_id := adm_zip_api.unzip_document(p_document_id => l_zip_id);
+  -- l_root_id is the new folder 42/<archive name>
+  commit;
+end;
+/
+```
+
+For an archive that already exists (an upload), move it first. The move raises `e_doc_exists` when
+the destination already holds a document with that name.
+
+```sql
+adm_document_api.move_document(p_document_id => 4711, p_destination_folder_id => 42);
+l_root_id := adm_zip_api.unzip_document(p_document_id => 4711);
+```
+
+`zip_document(p_document_id, p_target_folder_id)` packs one document into `<name>.zip` in its own
+folder by default. Both zip functions return the new archive's document id.
+
+Extract with a stricter limit and undo a partial tree on failure:
+
+```sql
+declare
+  l_root_id adm_folders.folder_id%type;
+begin
+  adm_context_api.system_user_login('JDOE');
+  savepoint before_unzip;
+  l_root_id := adm_zip_api.unzip_document(
+                 p_document_id         => 4711
+               , p_max_entries         => 200
+               , p_max_extracted_bytes => 50 * 1024 * 1024
+               );
   commit;
 exception
   when others then
-    rollback;          -- otherwise a half-extracted tree can still be committed later
+    rollback to before_unzip;   -- removes a tree that a hook or a name check stopped half-way
     raise;
 end;
 /
 ```
 
-The extracted tree is invisible to other sessions until you commit — which is what makes the
-all-or-nothing behaviour possible.
+## Errors
 
-## Errors worth catching
-
-| Situation | Exception |
+| Exception | Raised when |
 | --- | --- |
-| Document missing or trashed | `adm_error.e_doc_not_found` |
-| Folder missing or trashed | `adm_error.e_folder_not_found` |
-| Caller may not read the source | `adm_error.e_no_view_right` |
-| Caller may not write the destination | `adm_error.e_no_edit_right` |
-| The document is not a zip file | `adm_error.e_not_an_archive` |
-| Nothing readable to pack, or an empty archive | `adm_error.e_archive_empty` |
-| Unsafe entry path in the archive | `adm_error.e_invalid_name` |
-| Any size or entry guard | `adm_error.e_limit_exceeded` |
-| A trashed folder holds a name the tree needs | `adm_error.e_folder_exists` |
-| The trash folder itself | `adm_error.e_folder_trash_rule` |
+| `e_doc_not_found` | document missing or in the trash |
+| `e_no_current_version` | the document has no version to read |
+| `e_folder_not_found` | folder missing or in the trash |
+| `e_no_view_right` | caller may not read the source |
+| `e_no_edit_right` / `e_no_permission` | destination not writable (see gotcha 8) |
+| `e_not_an_archive` | the document is not a zip file |
+| `e_archive_empty` | nothing readable to pack, or no files in the archive |
+| `e_invalid_name` | unsafe entry path |
+| `e_limit_exceeded` | any size or entry guard |
+| `e_folder_exists` | a trashed folder holds a name the tree needs |
+| `e_folder_trash_rule` | `zip_folder` on the trash folder; `unzip_document` on an archive that sits in the trash |
 
-Guide with worked examples:
-<https://united-codes.com/products/apex-document-management/docs/using/zip/>
+Look up other parameters with `select argument_name, data_type, in_out, defaulted from user_arguments
+where package_name = 'ADM_ZIP_API' and object_name = 'UNZIP_DOCUMENT'`, or read the API reference.

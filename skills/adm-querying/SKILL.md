@@ -1,235 +1,160 @@
 ---
 name: adm-querying
 description: >
-  Reading data out of APEX Document Management (ADM) with SQL - the session-scoped adm_my_*_v
-  integration views, the unfiltered adm_report_*_v reporting views, the core tables and their
-  column comments, filtering a query down to what one user is allowed to see, and joining ADM
-  ids to your own tables. Use whenever a task involves reporting on ADM content, listing
-  documents or folders, building an APEX report or a REST feed over ADM data, counting storage,
-  or linking an ADM document_id or folder_id to an application table. Read the adm-plsql skill
-  first.
+  Reading data out of APEX Document Management (ADM) with SQL: the session-scoped adm_my_*_v views
+  (what the logged-in user may see), the unfiltered adm_report_*_v reporting views, the core
+  tables, access checks for one user, and linking ADM ids to your own tables. Use for an APEX
+  report or REST feed over documents or folders, "documents this user can see", a storage or
+  audit report, or a foreign key to adm_documents or adm_folders. Not for full-text or tag
+  search (see adm-search-and-tags) and not for changing data (see adm-documents, adm-folders).
+metadata:
+  version: "26.2"
 ---
 
 # Querying ADM
 
-Reading ADM's tables and views is supported. Writing is different: it goes through the
-packages, always (see `adm-plsql`).
+Reading ADM tables and views is supported. Writing goes through the packages. For contexts and
+transactions see `adm-plsql`.
 
-## Pick the right family of views first
+## Which source do I use?
 
-The prefix is the access scope, and getting it wrong is the one mistake here that leaks data.
-
-| Prefix | Scope | Use for |
-| --- | --- | --- |
-| `adm_my_*_v` | Only what the ADM user established in the current session may see. Identity comes from the context; no username parameter. No context, no rows. | Anything a user looks at: a report, a region, a REST feed |
-| `adm_report_*_v` | Every row in the instance, whoever is asking. Establishing a context does **not** narrow it. | Administrative reports, dashboards, data audits |
-
-**Do not put an `adm_report_*_v` view on a user-facing page.** It will list every document in
-the instance to whoever runs it.
-
-### The session-scoped integration views
-
-Six of them. They resolve access once, as a set-based semi-join, not per row.
-
-| View | One row per | Unique by |
-| --- | --- | --- |
-| `adm_my_documents_v` | active document the session may see, with its current version's metadata | `document_id` |
-| `adm_my_folders_v` | folder the session may see | `folder_id` |
-| `adm_my_document_tags_v` | tag on a visible document, `tag_name` resolved | `document_tag_id` |
-| `adm_my_document_versions_v` | version of a visible document, metadata only | `version_id` |
-| `adm_my_document_annotations_v` | annotation on a visible document | `annotation_id` |
-| `adm_my_folder_annotations_v` | annotation on a visible folder | `annotation_id` |
-
-```sql
--- everything in one folder that this user may see
-select document_id, document_name, file_mime_type, latest_file_size
-  from adm_my_documents_v
- where folder_id = :P1_FOLDER_ID
- order by document_name;
-```
-
-Four things to know before building on them:
-
-- **Active only.** A trashed or archived document is never returned, not even to its owner —
-  even though `adm_access_control_api.user_is_allowed_to_view_document` does still allow the
-  owner of a document in their own trash.
-- **Administrators see every active document and every non-trashed folder**, matching the
-  access API's admin bypass. Test a listing as an ordinary user, never as an administrator.
-- **Share-URL tokens and embed tokens are not honoured.** Those routes stay with
-  `adm_link_shares_api` and the embed pages.
-- **Establish the context, and clear it again.** In your own APEX application that means
-  `adm_context_api.system_user_login(:APP_USER)` as the Initialization PL/SQL Code *and*
-  `adm_context_api.clear_context` as the Cleanup PL/SQL Code. The context is scoped to the
-  database session and an APEX session comes from a connection pool, so skipping the cleanup
-  hands the next request the previous user's identity.
-
-Relationship views cannot leak: a count over `adm_my_document_tags_v` for a tag used only on an
-inaccessible document is zero, while `adm_report_tags_v.documents_count` counts it.
-
-### The administrative reporting views
-
-There are 12 `adm_report_*_v` views. They already join the pieces you would otherwise assemble
-by hand — a document with its latest version, a share with its recipient, an audit row with its
-asset — and every view and column carries a comment. None of them filters by access.
-
-| View | For |
+| I need | Use |
 | --- | --- |
-| `adm_report_documents_v` | Documents with owner, status, mime type, and the latest version's size |
-| `adm_report_document_versions_v` | Version history and per-version sizes |
-| `adm_report_folders_v` | The hierarchy with content counts |
-| `adm_report_document_shares_v`, `adm_report_folder_shares_v` | Who has been given access to what |
-| `adm_report_users_v`, `adm_report_groups_v` | Users and groups with ownership and sharing counts |
-| `adm_report_tags_v` | Tag usage |
-| `adm_report_audit_log_v` | The audit trail, with categorized actions and time buckets |
-| `adm_report_file_type_analysis_v` | Storage consumption by mime type |
-| `adm_report_system_overview_v` | One-row instance summary |
-| `adm_report_job_status_v` | Scheduled job health |
+| A list for the logged-in user: report, region, REST feed | `adm_my_*_v` (six views, below) |
+| An administrator report over the whole instance | `adm_report_*_v` (twelve views, below) |
+| "May user X see document Y", for one id or for another user | `adm_access_control_api` |
+| Documents that match a word or a tag | `adm_search_api` (see `adm-search-and-tags`) |
+| A column no view carries | the core tables, with the filters in gotcha 4 |
 
-The two share views deserve a warning of their own: `adm_document_shares_v`,
-`adm_folder_shares_v` and their `adm_report_*` counterparts hold **direct grants only**.
-Ownership, group ownership, a share inherited from an ancestor folder and the admin bypass all
-grant access without leaving a row, so the absence of a row proves nothing.
+The six session views: `adm_my_documents_v` (with the latest version's number and size),
+`adm_my_folders_v`, `adm_my_document_versions_v`, `adm_my_document_tags_v`,
+`adm_my_document_annotations_v`, `adm_my_folder_annotations_v`.
 
-```sql
-select column_name, comments
-  from user_col_comments
- where table_name = 'ADM_MY_DOCUMENTS_V'
- order by column_id;
-```
+The twelve report views, as `adm_report_<name>_v`: `documents`, `document_versions`, `folders`,
+`document_shares`, `folder_shares`, `users`, `groups`, `tags`, `audit_log`, `file_type_analysis`,
+`system_overview` (a key/value list of metrics, not one row) and `job_status`.
 
-Full descriptions: <https://united-codes.com/products/apex-document-management/docs/views/> ·
-worked examples:
-<https://united-codes.com/products/apex-document-management/docs/dev/querying-adm-from-sql/>
+## Gotchas
 
-## The core tables
+1. **Only `adm_my_*_v` is filtered by user.** Every other view (`adm_report_*_v`,
+   `adm_document_shares_v`, `adm_folder_shares_v`, `adm_ai_rag_*_v`) and every table returns all rows,
+   whatever context is set. Never put one on a page a normal user can open.
+2. **`adm_my_*_v` read the context and have no username parameter.** Without a context they return
+   0 rows and no error. They return active rows only: a trashed or archived document is hidden,
+   even from its owner. An administrator sees every active document and every folder that is not in
+   the trash. Share-link and embed tokens are not honoured. Test a listing as an ordinary user.
+3. **Your own APEX application must set the context itself.** Use the Initialization and Cleanup
+   PL/SQL Code from `adm-plsql` (recipes); `establish_from_session` leaves such a session without identity.
+4. **Report views and tables include trash and archive.** Filter `deleted_flag = 'N'` (set on every
+   row below a trashed folder, not only on the folder you trashed) and, on documents,
+   `archived_flag = 'N'`. `document_status` in `adm_report_documents_v` is one label for three
+   independent flags: an archived document on legal hold reads `ARCHIVED`.
+5. **`adm_storage_api.get_file_content` does not check access.** Any user can read any version id
+   they pass in. Take the `version_id` from `adm_my_documents_v.latest_version_id` or
+   `adm_my_document_versions_v`. Do not read `adm_document_versions.file_content`: it is empty for
+   object storage.
+6. **Do not rebuild access rules with joins.** Home folders, group folders, direct and inherited
+   shares and the administrator role all grant access. Ask `adm_access_control_api`, or use the views.
+   In an `ADMIN` context, including `system_login`, every check answers yes and ignores `p_username`.
+   For another user's real answer, call `system_user_login` as that user and ask without `p_username`.
+   A check per row suits a page of rows, not a million: narrow the set first.
+7. **Check return types.** `user_is_allowed_to_view_document` and `is_allowed_to_view_folder`
+   return `boolean`: call them from PL/SQL (SQL can use a boolean function only on 23ai and later; ADM also
+   runs on 19c). In SQL use `is_allowed_to_view_folder_yn(...) = 'Y'`. `user_has_edit_rights_*` return
+   `'EDIT'` or `'VIEW'`: compare with `adm_access_control_api.c_edit`. A user without any access gets
+   `'VIEW'` too, so that value does not prove read access.
+8. **Two helpers do not mean "everything this user can see".** `documents_in_shared_folders` and
+   `folders_in_shared_folders` cover only subtrees of folders shared with the user. The share views
+   list direct grants only. A missing row proves nothing: ownership, a share on an ancestor folder
+   and the administrator role leave no row.
+9. **Ids are `number` with up to 32 digits.** `integer` holds them. These do not: `pls_integer`,
+   `binary_integer`, `number(n)` with n < 32, and a JSON or JavaScript number (a double). Hand ids
+   to JavaScript as strings (`to_char`). A column that stores an ADM id needs a foreign key with
+   `on delete cascade` or `on delete set null` (see `adm-plsql`).
+10. **`like` on a path needs `adm_utils.escape_like`.** A folder name may contain `_` or `%`.
 
-Query them directly when a view does not carry what you need. The ones you will actually touch:
+## Recipes
 
-| Table | Holds |
-| --- | --- |
-| `adm_documents` | One row per document: `document_name`, `folder_id`, `file_mime_type`, `latest_version_id`, `user_owner`, `group_owner`, `deleted_flag`, `archived_flag`, `legal_hold_flag`, `retention_delete_date` |
-| `adm_document_versions` | One row per version: `version_number`, `file_size`, `checksum`. **Read content via `adm_storage_api.get_file_content`, not the BLOB column** — it is empty for object-storage documents |
-| `adm_folders` | The tree: `folder_path`, `parent_folder_id`, `is_system_folder`, `deleted_flag`, `trash_root_flag` |
-| `adm_users`, `adm_roles`, `adm_groups`, `adm_group_members` | Identity |
-| `adm_document_shares`, `adm_folder_shares`, `adm_document_link_shares`, `adm_embed_tokens` | Granted access |
-| `adm_tags`, `adm_document_tags` | Tags and their values |
-| `adm_document_annotations`, `adm_folder_annotations` | Key/value metadata, including ADM's own `file.*` keys |
-| `adm_audit_log` | Every recorded action |
+Run these after a context is set (`adm_context_api.system_login` in a script).
 
-Two filters belong on nearly every query over documents or folders:
-
-```sql
-  where deleted_flag = 'N'      -- 'Y' means "is in the trash", for a whole trashed subtree
-    and archived_flag = 'N'     -- adm_documents only
-```
-
-`deleted_flag = 'Y'` is set on every descendant of a trashed folder, not only on the folder you
-trashed — so omitting it does not show you "a few deleted rows", it shows you whole subtrees users
-believe they have thrown away.
-
-When you build a path predicate yourself, escape the pattern — a folder name may legitimately
-contain `_` or `%`:
-
-```sql
-where f.folder_path like adm_utils.escape_like(l_prefix) || '/%' escape '\'
-```
-
-## Restricting a query to one user
-
-Nothing in a plain `select` over the **tables** or the `adm_report_*_v` views enforces ADM's
-permissions. Home folders, group folders, direct shares, shares inherited from a parent folder
-and the admin bypass all feed into the answer, so do not attempt to reproduce it with joins.
-
-**The first answer is an `adm_my_*_v` view** — it has already done this, once, as a semi-join.
-Reach for the options below only when a view cannot carry what you need: when you are asking
-about a *different* user than the session's, when the trash or the archive is in scope, or when
-you have a single id in PL/SQL and no row source to hang the check on.
-
-**Ask per row.** `adm_access_control_api` answers from the current context by default, so most
-calls take only an id. Mind which functions are callable from SQL:
+**1. APEX report: documents the session user may see, with folder path, size and latest version.**
 
 ```sql
--- folders: the _yn variant returns 'Y'/'N', so it works in SQL and in APEX conditions
-select f.folder_id, f.folder_path
-  from adm_folders f
- where f.deleted_flag = 'N'
-   and adm_access_control_api.is_allowed_to_view_folder_yn(p_folder_id => f.folder_id) = 'Y';
+select d.document_id
+     , d.document_name
+     , d.folder_path
+     , d.latest_version_number
+     , d.latest_file_size                                  -- bytes: a small file shows 0 in size_mb
+     , round(d.latest_file_size / 1024 / 1024, 2) as size_mb
+  from adm_my_documents_v d
+ where d.folder_id = :P1_FOLDER_ID          -- or: d.folder_path like adm_utils.escape_like(:P1_PATH) || '/%' escape '\'
+ order by d.document_name;
 ```
 
-`user_is_allowed_to_view_document` and `is_allowed_to_view_folder` return **`boolean`**, which is
-not callable from SQL before Oracle 23ai — and ADM runs on 19c too. Call those from PL/SQL:
+The init code for your own APEX application is in `adm-plsql`.
+
+**2. Administrator report: storage per folder.**
 
 ```sql
-for r in (select document_id from adm_documents where folder_id = l_folder_id and deleted_flag = 'N') loop
-  if adm_access_control_api.user_is_allowed_to_view_document(p_document_id => r.document_id) then
-    ...
-  end if;
-end loop;
+select folder_path
+     , count(*)                                       as documents
+     , sum(latest_file_size)                          as bytes
+     , round(sum(latest_file_size) / 1024 / 1024, 2)  as mb
+  from adm_report_documents_v
+ where deleted_flag = 'N'            -- archived documents still use storage, so they stay in
+ group by folder_path
+ order by bytes desc;
 ```
 
-`user_has_edit_rights_on_document` and `user_has_edit_rights_on_folder` return `varchar2` — compare
-against `adm_access_control_api.c_edit` — so they are usable in SQL on any supported release.
+One folder with everything below it: add
+`and (folder_path = :path or folder_path like adm_utils.escape_like(:path) || '/%' escape '\')`.
+The sum above counts only each document's latest version. For all versions, sum `file_size` from
+`adm_report_document_versions_v` instead. It has no `deleted_flag`, so it also counts documents in the trash.
+By file type: `adm_report_file_type_analysis_v`.
 
-All of them accept an explicit `p_username` when you are reporting *about* another user rather than
-*as* them. Related helpers, both pipelined:
+**3. Visible documents that carry a tag value** (no cache delay, unlike `adm_search_api`):
 
 ```sql
-select column_value as document_id
-  from table(adm_access_control_api.documents_in_shared_folders(p_username => 'JDOE'));
-
-select column_value as folder_id
-  from table(adm_access_control_api.folders_in_shared_folders(p_username => 'JDOE'));
+select d.document_id, d.document_name
+  from adm_my_documents_v d
+ where exists (select 1
+                 from adm_my_document_tags_v t
+                where t.document_id = d.document_id
+                  and t.tag_name    = 'department'      -- tag names are lower case
+                  and t.tag_value   = 'Finance');       -- values keep their case
 ```
 
-**Ask in bulk, with a search** — `adm_search_api.search_user_documents` returns only what the named
-user may see and takes a full-text expression and tag facets. See the `adm-search-and-tags` skill.
-
-Per-row checks are fine for a report page's worth of rows and a poor idea across a million: they
-are functions, not joins, and the optimizer cannot see through them. For large scans, restrict the
-set first (a folder subtree, a date range, a search) and let the check filter what survives.
-
-<!-- Not part of the documented API: the product's own listings are built on SQL macros such as
-     adm_user_accessible_documents_mcr(p_username) and adm_user_accessible_folders_mcr(p_username).
-     They are not in the published reference and may change between releases, so ask United Codes
-     before building on them rather than treating them as public. -->
-
-## Linking ADM to your own tables
-
-Storing an ADM `document_id` or `folder_id` in your table is the intended way to connect a case, a
-claim or an order to its documents.
-
-```sql
-create table case_documents (
-  case_id     number not null
-, document_id number not null
-, constraint case_documents_doc_fk foreign key (document_id)
-    references adm_documents (document_id) on delete cascade
-);
-```
-
-Two rules, both load-bearing:
-
-- **`on delete cascade` or `on delete set null` — never restricting.** A restricting constraint
-  makes ADM's own delete fail, which turns an ordinary user action into an error nobody can clear.
-- **`number`, never `integer`.** Ids run to 32 decimal digits.
-
-If a document may be absent, prefer `on delete set null` and keep your own row; if the link has no
-meaning without the document, cascade.
-
-## Auditing your own actions
-
-If your workflow does something a reviewer will later ask about, put it in ADM's audit trail
-rather than a log table of your own:
+**4. Audit your own action** (the table is `adm_audit_log`, read it through `adm_report_audit_log_v`):
 
 ```sql
 adm_audit_api.add_audit(
-  p_action_type    => adm_audit_api.c_action_type_create_document
-, p_action_details => 'Filed automatically from case 2026-0042'
+  p_action_type    => adm_audit_api.c_action_type_create_document   -- or your own text, up to 50 characters
+, p_action_details => 'Filed automatically from case 2026-0042'     -- longer than 4000 characters is cut
 , p_document_id    => l_document_id
+, p_folder_id      => l_folder_id     -- without it the report shows no folder path for this row
 );
 ```
 
-The row is stamped with the current context identity and access channel. `adm_audit_api` has a
-`c_action_*` constant for every action type ADM itself records; reuse the closest one so the audit
-report categorizes your row rather than dropping it into an "other" bucket. Details longer than
-4000 characters are truncated rather than raising.
+**5. Read column comments** (every table, view and column has one):
+
+```sql
+select c.column_name, c.comments
+  from user_col_comments c
+  join user_tab_columns t on t.table_name = c.table_name and t.column_name = c.column_name
+ where c.table_name = 'ADM_MY_DOCUMENTS_V'
+ order by t.column_id;
+```
+
+## Errors
+
+| Exception | Raised when |
+| --- | --- |
+| `adm_error.e_user_not_found` | `system_user_login` for a name that is not in `adm_users` |
+| `adm_error.e_no_permission` | `system_user_login` for a deactivated user |
+| `adm_error.e_version_not_found` | `get_file_content` for an unknown `p_version_id` |
+| `ORA-12899` (not an ADM error) | `add_audit` with a `p_action_type` longer than 50 characters |
+
+Everything else: the generated reference at
+<https://united-codes.com/products/apex-document-management/docs/views/> and `/docs/api/`. Parameters of a call:
+`select argument_name, data_type, in_out, defaulted from user_arguments where package_name = 'ADM_X' and object_name = 'PROC'`.
+For tables, read the comments (recipe 5).

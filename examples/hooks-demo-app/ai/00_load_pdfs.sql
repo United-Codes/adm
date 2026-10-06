@@ -83,7 +83,7 @@ begin
   begin
     l_folder_id := adm_folder_api.get_folder_id('/users/' || lower('&hkd_user') || '/' || c_folder_name);
   exception
-    when no_data_found then
+    when adm_error.e_folder_not_found then
       l_folder_id := adm_folder_api.add_folder(c_folder_name, l_home);
   end;
 
