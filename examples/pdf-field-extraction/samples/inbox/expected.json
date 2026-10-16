@@ -1,0 +1,112 @@
+{
+  "inbox-harbour-invoice": {
+    "form_code": "HARBOUR_INVOICE",
+    "fields": {
+      "document_type": "invoice",
+      "invoice_number": "INV-2026-01107",
+      "invoice_date": "2026-09-30",
+      "due_date": "2026-10-30",
+      "customer_number": "C-12230",
+      "customer_name": "Gemeinnützige Gesellschaft für Erwachsenenbildung und berufliche Weiterqualifizierung Nord mbH",
+      "order_reference": "GGEB-BST-8020",
+      "discount_amount": 0.0,
+      "net_amount": 393.2,
+      "vat_rate": 7,
+      "vat_amount": 27.52,
+      "total_amount": 420.72
+    },
+    "line_items": [
+      {
+        "item_number": "PAP-A4-80",
+        "quantity": 6.0,
+        "unit_price": 24.9,
+        "amount": 149.4
+      },
+      {
+        "item_number": "BND-RING-50",
+        "quantity": 4.0,
+        "unit_price": 31.2,
+        "amount": 124.8
+      },
+      {
+        "item_number": "WBD-120",
+        "quantity": 1.0,
+        "unit_price": 119.0,
+        "amount": 119.0
+      }
+    ]
+  },
+  "inbox-harbour-delivery": {
+    "form_code": "HARBOUR_DELIVERY_NOTE",
+    "fields": {
+      "delivery_note_number": "DN-2026-1190",
+      "delivery_date": "2026-10-01",
+      "customer_number": "C-11502",
+      "customer_name": "Lindqvist Architekten GmbH",
+      "order_reference": "LA-2026-131",
+      "total_quantity": 5
+    },
+    "line_items": [
+      {
+        "item_number": "WBD-120",
+        "quantity": 2.0
+      },
+      {
+        "item_number": "LMP-LED-02",
+        "quantity": 3.0
+      }
+    ]
+  },
+  "inbox-nordwind-photo": {
+    "form_code": "NORDWIND_INVOICE",
+    "fields": {
+      "document_type": "invoice",
+      "invoice_number": "NWL/26/10988",
+      "invoice_date": "2026-09-29",
+      "due_date": "2026-10-29",
+      "customer_number": "400-2213",
+      "customer_name": "Van Dijk Bouwmaterialen B.V.",
+      "order_reference": "4500131204",
+      "discount_amount": 0,
+      "net_amount": 761.6,
+      "vat_rate": 21,
+      "vat_amount": 159.94,
+      "total_amount": 921.54
+    },
+    "line_items": [
+      {
+        "item_number": "FRT-PAL",
+        "quantity": 8.0,
+        "unit_price": 85.0,
+        "amount": 680.0
+      },
+      {
+        "item_number": "FUEL",
+        "quantity": 1.0,
+        "unit_price": 81.6,
+        "amount": 81.6
+      }
+    ]
+  },
+  "inbox-harbour-scanned": {
+    "form_code": "HARBOUR_DELIVERY_NOTE",
+    "fields": {
+      "delivery_note_number": "DN-2026-1190",
+      "delivery_date": "2026-10-01",
+      "customer_number": "C-11502",
+      "customer_name": "Lindqvist Architekten GmbH",
+      "order_reference": "LA-2026-131",
+      "total_quantity": 5
+    },
+    "line_items": [
+      {
+        "item_number": "WBD-120",
+        "quantity": 2.0
+      },
+      {
+        "item_number": "LMP-LED-02",
+        "quantity": 3.0
+      }
+    ]
+  }
+}
