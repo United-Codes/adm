@@ -2,10 +2,11 @@
 name: adm-hooks
 description: >
   Writes, registers and tests ADM (APEX Document Management) hooks - your PL/SQL that ADM calls
-  on AFTER_NEW_FILE_UPLOAD, AFTER_NEW_FILE_VERSION and AFTER_NEW_FOLDER_CREATION. Use to refuse
-  an upload (by name, extension, size or folder), to enforce a naming rule, to queue work when a
-  file arrives or a folder is created, or when a task mentions adm_hooks, hook_plsql or
-  adm_hooks_api. Covers registering a hook from a script and why the caller must roll back a
+  on AFTER_NEW_FILE_UPLOAD, AFTER_NEW_FILE_VERSION, AFTER_NEW_FOLDER_CREATION, and on retention,
+  delete, trash, move and share events. Use to refuse an upload (by name, extension, size or
+  folder), to enforce a naming rule, to queue work when a file arrives or a folder is created, to
+  warn before a retention ends or to veto a delete, or when a task mentions adm_hooks, hook_plsql
+  or adm_hooks_api. Covers registering a hook from a script and why the caller must roll back a
   refusal. Not for plain uploads (see adm-documents).
 metadata:
   version: "26.2"
@@ -21,6 +22,14 @@ the event's parameters bound by name. See `adm-plsql` for contexts and transacti
 | `AFTER_NEW_FILE_UPLOAD` | a new document is created | `:p_document_id`, `:p_version_id` |
 | `AFTER_NEW_FILE_VERSION` | a version is added to an existing document | `:p_document_id`, `:p_version_id` |
 | `AFTER_NEW_FOLDER_CREATION` | a folder is created | `:p_folder_id` |
+| `RETENTION_ENDING_SOON` | the daily job: a retention ends in `RETENTION_WARNING_DAYS` (default 14, `0` = off) or fewer | `:p_document_id`, `:p_retention_end_date`, `:p_end_action`, `:p_days_left` |
+| `RETENTION_ENDED` | the daily job: a retention ended | `:p_document_id`, `:p_retention_end_date`, `:p_end_action` |
+| `BEFORE_DOCUMENT_DELETE` | before a document is deleted for good | `:p_document_id`, `:p_reason` (`MANUAL`, `RETENTION`, `FOLDER_DELETE`, `TRASH_CLEANUP`) |
+| `AFTER_DOCUMENT_TRASHED` / `AFTER_DOCUMENT_RESTORED` | a document goes to or returns from the trash | `:p_document_id`, `:p_folder_id` |
+| `AFTER_DOCUMENT_MOVED` | a document moves to another folder | `:p_document_id`, `:p_old_folder_id`, `:p_new_folder_id` |
+| `AFTER_FOLDER_MOVED` | a folder moves to another parent | `:p_folder_id`, `:p_old_parent_folder_id`, `:p_new_parent_folder_id` |
+| `AFTER_SHARE_CREATED` | a share row is created (one call per recipient) | `:p_share_type` (`DOCUMENT`, `FOLDER`, `LINK`), `:p_object_id`, `:p_share_id`, `:p_share_role`, `:p_shared_with_user_id`, `:p_shared_with_group_id` |
+| `AFTER_RETENTION_CHANGED` | a retention of a document or folder changes | `:p_object_type` (`DOCUMENT`, `FOLDER`), `:p_object_id`, `:p_change` (`ADD`, `EXTEND`, `REMOVE`), `:p_retention_end_date`, `:p_period_value`, `:p_period_unit` |
 
 ## Gotchas
 
@@ -35,7 +44,7 @@ the event's parameters bound by name. See `adm-plsql` for contexts and transacti
    including `-20001`, becomes `e_hook_failed` (-20109) with a generic message; your message
    goes to the `apex_debug` log. Test with `adm_error.is_customer_error(sqlcode)`. Write the
    message for the end user, without `sqlerrm`.
-4. **Registration replaces.** The three `adm_hooks` rows exist after install, and each holds one
+4. **Registration replaces.** The `adm_hooks` rows exist after install, and each holds one
    snippet. `update adm_hooks set hook_plsql = ...` is the one supported direct write to an ADM
    table (the application's hook page stores its snippet in the same column). Read the old snippet first, and check
    `sql%rowcount`: an unknown `hook_key` updates nothing without an error. The row survives an
@@ -49,14 +58,27 @@ the event's parameters bound by name. See `adm-plsql` for contexts and transacti
    the content equals the latest version. A queue worker must expect a stale id.
 7. **Every route fires the hooks**, including zip extraction (`adm-zip`): a refusing hook fails
    the extraction at the refused file.
-8. **A hook never commits**, except a refusal log in a procedure with `pragma autonomous_transaction`.
-   A refused upload leaves no other trace.
+8. **A hook never commits**, except a refusal log in an `autonomous_transaction` procedure.
 9. **A hook that creates a folder or document starts the hooks again** (limit: 10 levels, then
    `e_hook_depth_exceeded`, which is not wrapped). Pass `p_run_hooks => false` to `add_folder`,
    `create_document` or `add_document_version`. Only an administrator or the system user may; anyone
    else gets `e_admin_required`. An administrator can bypass a refusing hook the same way.
 10. **Keep it short.** The user waits for the hook. Queue slow work, and do not send mail or call a
     web service (a rollback does not undo them). `dbms_scheduler.create_job` commits the caller.
+
+11. **The retention events run in the daily job**, as the system user, without an APEX session, once
+    per document and end date (log table `adm_retention_hook_log`; an extension gives a new end
+    date and fires again). Trashed documents are skipped. For a `DELETE` retention, `RETENTION_ENDED`
+    fires right before the delete and a `-20700 .. -20999` raise vetoes it: the job logs an error
+    that names the document, deletes nothing for it, and tries again on its next run. A document
+    under legal hold gets the event after the hold ends. A hook registered later gets
+    `RETENTION_ENDED` once for every `RELEASE` retention that ended long ago. A folder rule can end
+    thousands of documents on one day, so keep the hook short.
+12. **`BEFORE_DOCUMENT_DELETE` and the other new events refuse the whole operation** when they raise
+    `-20700 .. -20999`: a manual delete, "empty the trash", a folder delete (one call per document)
+    and the retention delete all stop. `TRASH_CLEANUP` is only for a document trashed on its own;
+    a trashed folder's documents get `FOLDER_DELETE`. Folder trash/restore, embed tokens, link
+    share changes and legal holds fire no hook.
 
 ## Recipes
 
@@ -164,5 +186,5 @@ end;
 | `e_admin_required` (-20120) | a non-admin passed `p_run_hooks => false` |
 
 `adm_hooks_api` has nothing to call: its `run_*` procedures belong to the product. Its constants
-`c_after_new_file_upload`, `c_after_new_file_version` and `c_after_new_folder_creation` are the
-keys. For anything else, read the API reference or query `user_arguments`.
+`c_after_new_file_upload`, `c_after_new_file_version`, `c_after_new_folder_creation`,
+`c_retention_ended`, `c_before_document_delete` etc. are the keys. For anything else, read the API reference or query `user_arguments`.
