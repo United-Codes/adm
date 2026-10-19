@@ -50,9 +50,9 @@ is not yet answerable.
    `AI_CHUNK_FILE_LIMIT` files per call, so one call may not finish the work. Do not call
    `sync_rag_collection_files` first. A sync that finds another one running skips silently.
 8. **Retrieval applies the caller's rights after the top-k cut.** `search_chunks` can return fewer rows
-   than `p_limit`, and under `system_login` or an ADMIN context everything matches: use
-   `system_user_login` when the answer goes to a person. `generate_answer` returns the text
-   `No relevant sources found to answer this question.` when nothing matches; it is not an error.
+   than `p_limit`. `system_login` matches everything: use `system_user_login` for a person. An ADMIN
+   person gets the personal view; `p_as_admin => true` (all four retrieval calls) opts in to every
+   document. `generate_answer` says `No relevant sources found to answer this question.` for no match.
 9. **`p_document_id` exists on `search_chunks` and `prepare_sources` only.** It needs `ORACLE`
     (`e_no_doc_scoped_search`, raised before the embedding call); a document not active in the collection
     gives no rows. `p_rewrite_config` and `p_answer_config` are `json_object_t`, merged

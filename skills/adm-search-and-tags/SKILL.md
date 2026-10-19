@@ -37,8 +37,9 @@ A tag (`adm_tags`) is a name. Attached to a document (`adm_document_tags`) it ca
    a user-facing page use `search_user_documents`. Both skip trashed and archived documents and
    documents in a trashed folder.
 5. **`search_user_documents` needs `p_username`** (null raises `e_missing_param`; case does not
-   matter; an unknown name finds nothing). An `ADMIN` user finds every active document. So does the
-   system user: under `system_login` pass `sys_context('ADM_CONTEXT', 'ADM_USERNAME')` (it is not in
+   matter; an unknown name finds nothing). Search is personal: an `ADMIN` user finds only what they own
+   or what was shared with them, like everyone else. Only the system user finds every active document:
+   under `system_login` pass `sys_context('ADM_CONTEXT', 'ADM_USERNAME')` (it is not in
    `adm_users`). Passing `_UC_SYSTEM_` from another session finds nothing. The access
    list comes from a cache: a share on a **folder** appears only after
    `adm_cache_api.update_subshared_files_cache(p_username => ...)` or the next cache refresh (nightly,
