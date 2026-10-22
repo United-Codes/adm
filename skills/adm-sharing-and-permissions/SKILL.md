@@ -20,7 +20,7 @@ Needs an established context and your own `commit` - see `adm-plsql`.
 1. **Only ADMIN bypasses; the role does nothing else.** Access comes from ownership (own home or
    group folder), a share on the document or a folder above it, or a token. A `VIEWER` user with an
    EDIT share can write through the API: limit people with the share role. A share never makes an
-   owner: `user_has_owner_rights_*` is true only in the user's own or a group folder.
+   owner: `user_has_owner_rights_*` is true only in the user's home or an `EDIT` member's group folder.
 2. **Under an ADMIN context (`system_login` too) every check is TRUE / `EDIT` for any `p_username`.**
    To prove a person's rights, run as an ordinary user (`system_user_login`) and pass `p_username`
    in **upper case**, as stored in `adm_users`: lower case still matches a home folder, never a share.
@@ -167,9 +167,9 @@ select user_id into l_user_id from adm_users where username = 'JDOE';
 adm_group_api.add_user_to_group(p_group_id => l_group_id, p_user_id => l_user_id);
 ```
 
-The username must match what your APEX authentication signs in as. `remove_user_from_group(p_group_id, p_user_id)`
-removes a member. `deactivate_user(p_username)` deletes every share to and from the user and blocks
-`system_user_login`; `activate_user` does not bring the shares back.
+The username must match what your APEX authentication signs in as. `p_member_role => 'VIEW'` makes a member
+read-only in the group folder (a share to the group keeps its role). `deactivate_user(p_username)` deletes every
+share to and from the user and blocks `system_user_login`; `activate_user` does not bring the shares back.
 
 ## Errors
 
