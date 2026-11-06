@@ -101,6 +101,12 @@ begin
 
   sweep('Vector search only',  0.5, 0.4);
   sweep('Vector search only, lower still',  0.3, 0.2);
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 
@@ -130,6 +136,11 @@ declare
       end if;
     end loop collection_loop;
     commit;
+    adm_context_api.clear_context;
+  exception
+    when others then
+      adm_context_api.clear_context;
+      raise;
   end set_hybrid;
 
   function cell (

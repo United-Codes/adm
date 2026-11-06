@@ -85,6 +85,12 @@ begin
   ensure_group('AIC_LEGAL', 'Demo: legal department, owns the contracts', 'AIC_LEGAL');
   ensure_group('AIC_HR',    'Demo: HR department, owns the policies',     'AIC_HR');
   commit;
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 set feedback on

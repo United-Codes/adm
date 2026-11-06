@@ -15,12 +15,22 @@ create or replace package body aic_agent_api as
     l_result      json_object_t;
     l_is_followup number;
     l_input       json_object_t := json_object_t();
+    -- the ADM context of the caller, put back when the run fails
+    l_prev_user   varchar2(255 char);
+    l_prev_role   varchar2(30 char);
+    l_prev_source varchar2(30 char);
   begin
+    l_prev_user   := sys_context(adm_context_api.c_ctx_namespace, adm_context_api.c_ctx_username);
+    l_prev_role   := sys_context(adm_context_api.c_ctx_namespace, adm_context_api.c_ctx_role);
+    l_prev_source := sys_context(adm_context_api.c_ctx_namespace, adm_context_api.c_ctx_access_source);
+
     select min(workspace_name) into l_workspace from apex_workspace_schemas where schema = user;
     apex_util.set_workspace(l_workspace);
 
-    -- Any application will do: the session only has to exist. It is deleted again below.
-    select min(application_id) into l_app_id from apex_applications where workspace = l_workspace;
+    -- Any application of THIS schema will do: the session only has to exist. It is deleted again
+    -- below. UC AI runs the tool code in the parsing schema of this application, so an application
+    -- of another schema in the same workspace (lesson 7) must not be picked.
+    select min(application_id) into l_app_id from apex_applications where workspace = l_workspace and owner = user;
 
     -- 1. the APEX session, so that execute_agent does not create (and run init code for) its own
     apex_session.create_session(p_app_id => l_app_id, p_page_id => 1, p_username => p_username);
@@ -52,13 +62,21 @@ create or replace package body aic_agent_api as
     return l_result;
   exception
     when others then
-      apex_debug.error(c_scope_prefix || 'run_as: %s - %s', sqlerrm, sys.dbms_utility.format_error_backtrace);
-      begin
+      -- Log first: a handled error in the cleanup below would clear this one (ORA-21002 on raise).
+      adm_error.log_error(
+        p_scope => c_scope_prefix || 'run_as'
+      , p_extra => 'user: ' || p_username || ', agent: ' || p_agent_code
+      );
+      if apex_application.g_instance is not null then
         apex_session.delete_session;
-      exception
-        when others then -- @dblinter ignore(g-5040): a failure to delete the session must not hide the error that is raised below
-          null;
-      end;
+      end if;
+      -- The caller gets its own ADM context back, not the user of the failed run. After the
+      -- delete: the cleanup code of the ADM application clears the context when its session ends.
+      adm_context_api.restore_context(
+        p_username      => l_prev_user
+      , p_role          => l_prev_role
+      , p_access_source => l_prev_source
+      );
       raise;
   end run_as;
 

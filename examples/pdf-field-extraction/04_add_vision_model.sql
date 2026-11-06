@@ -18,7 +18,7 @@ begin
   -- update_profile replaces the whole configuration: start from the stored one.
   l_config := json_object_t(adm_ai_form_config_api.get_profile_config(l_profile_id));
 
-  -- The same server and options as the text model, with the vision model of settings.sql.
+  -- The same provider, credential and options as the text model, with the vision model of settings.sql.
   l_vision := l_config.get_object('text_model').clone;
   l_vision.put('model', '&pfx_vision_model');
   l_config.put('vision_model', l_vision);

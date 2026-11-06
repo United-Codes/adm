@@ -74,9 +74,11 @@ declare
 begin
   select role_id into l_role from adm_roles where role_name = 'CONTRIBUTOR';
   adm_context_api.system_login;
+  adm_context_api.clear_context;   -- the check only: the session does not stay the system user
   sys.dbms_output.put_line('3. OK: the role CONTRIBUTOR exists and adm_context_api.system_login works.');
 exception
   when others then
+    adm_context_api.clear_context;
     sys.dbms_output.put_line('3. FAILED: ' || substr(sqlerrm, 1, 200)); -- @dblinter ignore(g-5080): the message is the diagnosis this check exists to give, a backtrace of a probe would only confuse the reader
 end;
 /

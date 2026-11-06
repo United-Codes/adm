@@ -14,7 +14,8 @@
 -- these are separate columns.
 --
 -- With an argument the default_score_threshold of both collections is set for the run and put back
--- at the end.
+-- at the end, to the value that was stored before. Without one, each collection uses its stored value.
+-- Pass the argument when you compare runs, so that the result does not depend on what is stored.
 
 -- @dblinter ignore(g-5010): a tutorial script prints its results with dbms_output on
 -- purpose, so the reader sees them directly in SQLcl.
@@ -69,13 +70,29 @@ declare
       end if;
     end loop collection_loop;
     commit;
+    adm_context_api.clear_context;
+  exception
+    when others then
+      adm_context_api.clear_context;
+      raise;
   end set_threshold;
 begin
   if lower(c_threshold) != 'default' and c_threshold is not null then
     set_threshold(true, l_orig_map);
   end if;
 
-  sys.dbms_output.put_line('default_score_threshold: ' || nvl(c_threshold, 'default (0.5)'));
+  -- Print the threshold that is in force for each collection: the argument, or the stored value
+  -- (lesson 6 stores 0.4 for aic_policies in the RAG collection manager).
+  <<threshold_loop>>
+  for c in (
+    select collection_name
+         , nvl(json_value(config_json, '$.default_score_threshold'), '0.5 (built-in default)') as threshold
+      from adm_ai_rag_collections
+     where collection_name in ('aic_contracts', 'aic_policies')
+     order by collection_name
+  ) loop
+    sys.dbms_output.put_line('default_score_threshold ' || rpad(c.collection_name, 14) || ': ' || c.threshold);
+  end loop threshold_loop;
   sys.dbms_output.put_line(rpad('Q', 3) || rpad('asked as', 11) || rpad('retrieved', 10) || rpad('cited', 7) || rpad('fact', 6)
     || rpad('tools', 6) || rpad('in', 7) || rpad('out', 6) || rpad('sec', 6) || 'search texts the model chose');
   <<question_loop>>

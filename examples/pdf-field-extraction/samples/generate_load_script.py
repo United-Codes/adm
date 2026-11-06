@@ -201,7 +201,7 @@ def write_seed(out: Path, files: Path, expected):
 
 def main():
     write_load(HERE.parent / "00_load_samples.sql", FILES, "pfx_samples",
-               'Loads the sample documents of the course "Extract data from PDF forms with a local model" into ADM.',
+               'Loads the sample documents of the course "Extract data from PDF forms" into ADM.',
                "samples loaded")
     write_load(HERE.parent / "05_upload_inbox.sql", INBOX, "pfx_inbox",
                "Lesson 5: uploads four new documents into the inbox folder, the way an application would.",

@@ -7,8 +7,9 @@
 --   2. Refreshes the "shared with me" cache of both users. It holds the documents that reach a
 --      user through a folder share; the accessible-documents listings read it. Normally the
 --      first page load of the user does this.
---   3. Syncs both RAG collections: finds the files, extracts text, cuts chunks, calls the
---      embedding model, stores the vectors. Normally the five-minute job does this.
+--   3. Syncs the RAG collection aic_contracts (and aic_policies, if it exists already): finds the
+--      files, extracts text, cuts chunks, calls the embedding model, stores the vectors. Normally
+--      the five-minute job does this.
 --   4. Prints what that cost: web service calls, request size, seconds, chunks.
 --
 -- Run with the sample set it makes one embedding call for each file (the chunks of a file go out in
@@ -78,6 +79,12 @@ begin
   end loop collection_loop;
 
   sys.dbms_output.put_line('   total:        ' || secs(l_start));
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 

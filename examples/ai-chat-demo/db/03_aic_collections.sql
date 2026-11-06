@@ -1,8 +1,10 @@
--- Step 3 of 7: two RAG collections, one per folder. Run as the ADM schema owner, after step 2.
+-- Step 3 of 7: the RAG collection of the contracts. Run as the ADM schema owner, after step 2.
 -- Re-runnable: a collection that exists is left alone (drop it with 99_aic_teardown.sql).
 --
 --   aic_contracts  reads /groups/aic_legal   (the contracts)
---   aic_policies   reads /groups/aic_hr      (the policies)
+--
+-- The second collection, aic_policies over /groups/aic_hr, is not part of the install. Lesson 1 creates
+-- it in the RAG collection manager, or with 03b_aic_policies.sql.
 --
 -- This is the smallest configuration that works for questions and answers:
 --   * source_folder_path   which files belong to the collection
@@ -87,8 +89,13 @@ begin
   adm_context_api.system_login;
 
   ensure_collection('aic_contracts', 'Demo: the contracts of the Legal group', '/groups/aic_legal', p_scan_extraction => true);
-  ensure_collection('aic_policies',  'Demo: the policies of the HR group',     '/groups/aic_hr');
   commit;
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 set feedback on

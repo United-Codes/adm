@@ -1,5 +1,7 @@
 -- Lesson 1: a first answer from one collection, and the follow-up it cannot answer.
--- Run as the ADM schema owner, after step 4. Costs two answer calls and three search embeddings.
+-- Run as the ADM schema owner, after install.sql and after you created the collection aic_policies
+-- (in the RAG collection manager, or with 03b_aic_policies.sql). Costs two answer calls and three
+-- search embeddings.
 --
 --   sql -name <connection> @05_aic_lesson1_answers.sql
 --
@@ -44,7 +46,14 @@ declare
 begin
   adm_context_api.system_user_login('AIC_LEGAL');
   select rag_collection_id into l_contracts from adm_ai_rag_collections where collection_name = 'aic_contracts';
-  select rag_collection_id into l_policies  from adm_ai_rag_collections where collection_name = 'aic_policies';
+  begin
+    select rag_collection_id into l_policies from adm_ai_rag_collections where collection_name = 'aic_policies';
+  exception
+    when no_data_found then
+      sys.dbms_output.put_line('The collection aic_policies does not exist. Create it first: in the RAG collection manager,');
+      sys.dbms_output.put_line('or with @03b_aic_policies.sql. Then run this script again.');
+      return;
+  end;
 
   ask(l_contracts, '1. a question the contracts can answer',
       'What notice period applies if we want to end the Alpenwerk maintenance contract?');
@@ -67,6 +76,11 @@ begin
 
   ask(l_policies, '3. the same follow-up, if YOU pick the right collection',
       'And what does our travel policy say about hotel costs?');
+end;
+/
+-- Leave no ADM user on the session, so a later call in it does not run as that user.
+begin
+  adm_context_api.clear_context;
 end;
 /
 set feedback on

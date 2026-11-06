@@ -7,13 +7,19 @@
 --   1. the agent runs: the history of aic_assistant, and every run and memory of AIC_LEGAL and
 --      AIC_HR with other agents (the bundled adm_doc_assistant keeps a memory store per user)
 --   2. the UC AI objects: agent, prompt profile, tools
---   3. the RAG collections aic_contracts and aic_policies, with their chunks and their vectors
+--   3. the RAG collections aic_contracts, aic_policies and aic_policies_large (lesson 6), with their
+--      chunks and their vectors
 --      (adm_ai_rag_api.delete_rag_collection drops the vector table)
 --   4. the documents and folders under /groups/aic_legal and /groups/aic_hr, with their shares
---   5. the groups AIC_LEGAL and AIC_HR, the users AIC_LEGAL and AIC_HR and their home folders
---   6. the objects of this course: tables aic_*, packages aic_*
+--   5. the groups AIC_LEGAL and AIC_HR, the users AIC_LEGAL, AIC_HR and AIC_SERVICE (lesson 7) and
+--      their home folders
+--   6. the objects of this course: tables aic_*, packages aic_*. Dropping aic_rag_bridge_api (lesson 7)
+--      also removes its grant to the application schema
 --   7. the APEX accounts AIC_LEGAL and AIC_HR (db/18_aic_apex_users.sql) in the workspace of this schema
 --      (the chat app itself, application 218, is not removed: delete it in the App Builder)
+--
+-- Lesson 7 also changed another schema. Run 98_aic_app_teardown.sql as the application schema for
+-- that, and 97_aic_app_schema_drop.sql as a DBA if you created the demo schema AIC_APP.
 --
 -- What stays: the audit log of ADM (adm_audit_log) and the debug log keep their entries about
 -- these users. An audit trail that loses entries when a user is deleted is not an audit trail.
@@ -67,11 +73,17 @@ end;
 begin
   adm_context_api.system_login;
   <<collection_loop>>
-  for c in (select collection_name from adm_ai_rag_collections where collection_name in ('aic_contracts', 'aic_policies')) loop
+  for c in (select collection_name from adm_ai_rag_collections where collection_name in ('aic_contracts', 'aic_policies', 'aic_policies_large')) loop
     adm_ai_rag_api.delete_rag_collection(p_collection_name => c.collection_name);
     sys.dbms_output.put_line('3. collection removed: ' || c.collection_name);
   end loop collection_loop;
   commit;
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 
@@ -96,6 +108,12 @@ begin
   end loop document_loop;
   commit;
   sys.dbms_output.put_line('4. documents removed');
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 
@@ -112,7 +130,8 @@ begin
    where s.shared_with_user_id  in (select u.user_id  from adm_users  u where u.username   in ('AIC_LEGAL', 'AIC_HR'))
       or s.shared_with_group_id in (select g.group_id from adm_groups g where g.group_name in ('AIC_LEGAL', 'AIC_HR'));
   delete from adm_group_members m
-   where m.group_id in (select g.group_id from adm_groups g where g.group_name in ('AIC_LEGAL', 'AIC_HR'));
+   where m.group_id in (select g.group_id from adm_groups g where g.group_name in ('AIC_LEGAL', 'AIC_HR'))
+      or m.user_id  in (select u.user_id  from adm_users  u where u.username = 'AIC_SERVICE');
   delete from adm_groups where group_name in ('AIC_LEGAL', 'AIC_HR');
 
   -- folders: the group folders, then the home and trash folder of each user
@@ -127,9 +146,15 @@ begin
     delete from adm_folders where folder_id = f.folder_id; -- @dblinter ignore(g-3210): the folders must go one at a time, the deepest path first, so that no folder is deleted before its children
   end loop folder_loop;
 
-  delete from adm_users where username in ('AIC_LEGAL', 'AIC_HR');   -- the cache rows cascade
+  delete from adm_users where username in ('AIC_LEGAL', 'AIC_HR', 'AIC_SERVICE');   -- the cache rows cascade
   commit;
   sys.dbms_output.put_line('5. groups, users and folders removed');
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 
@@ -148,6 +173,7 @@ declare
     end if;
   end drop_if_exists;
 begin
+  drop_if_exists('PACKAGE', 'aic_rag_bridge_api');
   drop_if_exists('PACKAGE', 'aic_agent_api');
   drop_if_exists('PACKAGE', 'aic_rag_tools_api');
   drop_if_exists('TABLE',   'aic_questions');

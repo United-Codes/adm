@@ -101,9 +101,14 @@ create or replace package body aic_rag_tools_api as
       return l_json.to_clob();
     end;
   exception
-    when others then
-      -- Details go to the debug log. The answer is read by the model and then by a person.
-      apex_debug.error(c_scope_prefix || 'search: %s - %s', sqlerrm, sys.dbms_utility.format_error_backtrace);
+    when others then -- @dblinter ignore(g-5040): a tool never raises; the handler logs every error with adm_error.log_error and returns the status error
+      -- A tool never raises: an error inside a tool call can end the whole agent run. So the error
+      -- goes to the debug log (with its backtrace), and the model gets the status error. The answer
+      -- is read by the model and then by a person, so it carries no details.
+      adm_error.log_error(
+        p_scope => c_scope_prefix || 'search'
+      , p_extra => 'collection: ' || p_collection_name || ', user: ' || l_user
+      );
       return status_json('error', p_collection_name, 'The search failed. Tell the user that the search is unavailable.', l_user);
   end search;
 

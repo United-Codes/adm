@@ -93,4 +93,9 @@ begin
   ask('AIC_LEGAL', 'Which salary band is a senior engineer in?');
 end;
 /
+-- Leave no ADM user on the session, so a later call in it does not run as that user.
+begin
+  adm_context_api.clear_context;
+end;
+/
 set feedback on

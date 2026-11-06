@@ -38,16 +38,10 @@ begin
   , p_config_json  => q'~{
       "source_folder_path": "&pfx_home/pfx_samples",
       "text_model": {
-        "provider": "ollama",
+        "provider": "&pfx_provider",
         "model": "&pfx_text_model",
-        "config": {
-          "g_base_url": "&pfx_base_url",
-          "g_apex_web_credential": "&pfx_credential",
-          "g_extra_body": {"options": {"temperature": 0, "num_ctx": 16384}},
-          "ollama": {"g_use_responses_api": false}
-        }
+        "config": &pfx_model_config
       },
-      "max_text_chars": 20000,
       "rules": [
         "Return dates as YYYY-MM-DD.",
         "If a value is not in the document, return null. Never guess.",

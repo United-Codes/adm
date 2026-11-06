@@ -6,13 +6,15 @@
 set define on
 set verify off
 set feedback off
-set linesize 220
+set linesize 230
 set pagesize 100
+-- The default format keeps the whole text of an issue. ansiconsole cuts a column at the width of its first rows.
+set sqlformat default
 
 column document_name format a42
 column outcome format a11
 column seconds format a7
-column details format a100 word_wrapped
+column details format a120 word_wrapped
 
 with latest as (
   select m.document_name
@@ -73,3 +75,4 @@ select count(*) as documents
  where rn = 1;
 
 undefine 1
+set sqlformat ansiconsole

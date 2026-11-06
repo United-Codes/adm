@@ -1,4 +1,4 @@
--- Removes the course "Extract data from PDF forms with a local model": the AFTER_FORM_EXTRACTION
+-- Removes the course "Extract data from PDF forms": the AFTER_FORM_EXTRACTION
 -- hook when it is the hook of the course, the profile pfx_supplier_forms with its results, test
 -- set and measurements, the folders pfx_samples and pfx_inbox with their documents, and the pfx_
 -- objects. The documents are deleted permanently, not moved to the trash. The tag

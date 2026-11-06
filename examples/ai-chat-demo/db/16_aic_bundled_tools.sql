@@ -64,4 +64,9 @@ begin
   ask('AIC_HR',    'Which of my documents mention a notice period? Name the documents.');
 end;
 /
+-- Leave no ADM user on the session, so a later call in it does not run as that user.
+begin
+  adm_context_api.clear_context;
+end;
+/
 set feedback on

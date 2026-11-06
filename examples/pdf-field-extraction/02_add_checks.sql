@@ -1,6 +1,8 @@
 -- Lesson 2: adds the arithmetic checks of an invoice to the document type invoice. They apply to
 -- every invoice form of the profile. Run in SQLcl or SQL*Plus, connected as the ADM schema owner.
--- Calls no model. Running it again sets the same checks.
+-- Calls no model. Running it again sets the same checks. The line check of this first version is
+-- wrong for a credit note: the measurement of the lesson shows it, and 02_fix_line_check.sql
+-- corrects it.
 
 -- @dblinter ignore(g-5010): a tutorial script prints its results with dbms_output on
 -- purpose, so the reader sees them directly in SQLcl.
@@ -28,15 +30,14 @@ begin
   -- ---------------------------------------------------------------------------
   -- Add the checks of an invoice
   -- ---------------------------------------------------------------------------
-  -- A credit note prints a positive quantity and unit price next to a negative amount.
   l_config.put('line_checks', json_array_t(q'~[
     {"name": "quantity x unit price = amount",
-     "expr": "abs(abs(quantity * unit_price) - abs(amount)) <= 0.01"}
+     "expr": "abs(quantity * unit_price - amount) <= 0.01"}
   ]~'));
-  -- EN 16931 BR-CO-13 and BR-CO-15. The discount takes the sign of the invoice.
+  -- EN 16931 BR-CO-13 and BR-CO-15.
   l_config.put('checks', json_array_t(q'~[
     {"name": "sum of lines - discount = net amount",
-     "expr": "abs(sum_amount - sign(sum_amount) * abs(nvl(discount_amount, 0)) - net_amount) <= 0.01"},
+     "expr": "abs(sum_amount - nvl(discount_amount, 0) - net_amount) <= 0.01"},
     {"name": "net amount + VAT = total",
      "expr": "abs(net_amount + vat_amount - total_amount) <= 0.01"},
     {"name": "net amount x VAT rate = VAT",

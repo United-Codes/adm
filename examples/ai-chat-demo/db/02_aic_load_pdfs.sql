@@ -227,6 +227,12 @@ begin
 
   commit;
   sys.dbms_output.put_line(l_loaded || ' file(s) loaded.');
+  -- the system user only for this block: the next statement in this session runs as nobody
+  adm_context_api.clear_context;
+exception
+  when others then
+    adm_context_api.clear_context;
+    raise;
 end;
 /
 set feedback on

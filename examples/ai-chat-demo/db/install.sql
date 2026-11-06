@@ -10,7 +10,9 @@
 -- Embeds about 2,000 tokens and reads one scanned page with a model: fractions of a cent.
 -- Every upload passes p_run_hooks => false, so no ADM hook runs on the sample files.
 --
--- The lesson scripts (05, 09 to 16) are not part of the install. Run them one by one.
+-- It creates ONE collection, aic_contracts. Lesson 1 creates the second one, aic_policies, in the RAG
+-- collection manager. 03b_aic_policies.sql creates the same collection in SQL instead.
+-- The lesson scripts (03b, 05, 09 to 16) are not part of the install. Run them one by one.
 
 set define off
 whenever sqlerror exit failure
@@ -19,7 +21,7 @@ prompt === 1/7 users and groups ===
 @@01_aic_users.sql
 prompt === 2/7 sample files, folders and shares ===
 @@02_aic_load_pdfs.sql
-prompt === 3/7 RAG collections ===
+prompt === 3/7 RAG collection aic_contracts ===
 @@03_aic_collections.sql
 prompt === 4/7 index: text index, user caches, embeddings ===
 @@04_aic_index.sql
@@ -53,4 +55,6 @@ union all
 select 'tools', listagg(code, ', ') within group (order by code) from uc_ai_tools where code like 'AIC\_%' escape '\';
 
 prompt
-prompt Next: sql -name <connection> @05_aic_lesson1_answers.sql
+prompt Next: create the collection aic_policies in the RAG collection manager (lesson 1),
+prompt or run: sql -name <connection> @03b_aic_policies.sql
+prompt Then:   sql -name <connection> @05_aic_lesson1_answers.sql
