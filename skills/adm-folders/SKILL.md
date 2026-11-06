@@ -46,7 +46,8 @@ their trash; both exist as soon as the user does.
    `<name>_restored_<yyyymmddhh24miss>`. If the old parent is itself in the trash, restore fails.
 8. **`permanently_delete_folder` is for trash roots in your own trash.** A non-admin who names
    another user's trashed folder gets `e_no_permission`. If any document below is on legal hold
-   or under retention, nothing is deleted and `e_folder_has_protected` is raised.
+   or under retention, nothing is deleted and `e_folder_has_protected` is raised. `trash_folder`
+   raises `e_folder_hold_blocks` or `e_folder_retention_blocks` in the same case.
 9. **Rename and move drop the embed tokens** that point into the old path, because tokens are
    keyed on a path. Internal shares survive. Both rewrite the paths of the whole subtree.
 10. **You need no guard code for the structural rules.** The API refuses a move into the folder
@@ -141,6 +142,32 @@ p_potential_child_id)` is true for the same folder, too.
 | `move_folder` | already in that parent | `e_invalid_state` |
 | `add_folder`, `rename_folder` | forbidden character, leading or trailing space | `e_invalid_name` |
 | `permanently_delete_folder` | document on hold or under retention | `e_folder_has_protected` |
+| `move_document`, `move_folder` | content leaves a folder under a hold or a protecting retention rule | `e_hold_move_out`, `e_retention_move_out` |
+
+## Folder legal hold and folder retention
+
+Both cover the folder and everything below it, also files added later. Removing the rule restores
+the earlier state. Needs owner rights on the folder. `p_system => true` needs ADMIN.
+
+```sql
+adm_folder_api.add_legal_hold(p_folder_id => l_folder_id, p_reason => 'Case 4711');
+adm_folder_api.lift_legal_hold(p_folder_id => l_folder_id);
+
+adm_folder_api.add_retention(
+  p_folder_id => l_folder_id, p_period_value => 7, p_period_unit => 'YEAR'  -- DAY, MONTH, YEAR
+, p_end_action => 'DELETE', p_retention_category => 'INVOICES');
+adm_folder_api.extend_retention(p_folder_id => l_folder_id, p_period_value => 10, p_period_unit => 'YEAR');
+adm_folder_api.remove_retention(p_folder_id => l_folder_id);
+```
+
+- A document ends at its **creation date plus the period**. The latest end date of all rules wins.
+- The job deletes a document only when all its rules have ended, one of them is `DELETE`, and no
+  hold covers it. `RELEASE` means no automatic deletion, not "keep forever".
+- One active rule or hold per folder (`e_folder_retention_exists`, `e_folder_hold_exists`). The
+  period is at most 36500 days, 1200 months or 100 years (`e_retention_invalid`).
+- A running **system** retention cannot be removed or shortened by anyone
+  (`e_system_retention_locked`). Only extend it.
+- `is_under_retention`, `contains_retention` and `get_effective_retention_date` answer for a folder.
 
 Listing what is in a folder, for the current user only, is in `adm-querying`. For anything else,
 read the API reference or query `user_arguments where package_name = 'ADM_FOLDER_API'`
