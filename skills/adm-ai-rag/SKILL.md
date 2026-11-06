@@ -50,8 +50,8 @@ is not yet answerable.
    inline, holding the collection row lock until you commit. Each stage handles at most
    `AI_CHUNK_FILE_LIMIT` files per call, so one call may not finish the work. Do not call
    `sync_rag_collection_files` first. A sync that finds another one running skips silently.
-8. **Retrieval applies the caller's rights after the top-k cut.** `search_chunks` can return fewer rows
-   than `p_limit`. Only the system user (`system_login`, the jobs) sees every document: use
+8. **Rights are checked on a capped candidate window** (3 x `p_limit`, doubling up to least(20 x `p_limit`,
+   500)), so `search_chunks` can still return fewer rows than `p_limit`. Only the system user (`system_login`, the jobs) sees every document: use
    `system_user_login` for a person. An ADMIN person gets the **personal** view too, not the whole
    instance: `p_as_admin => true` (all four retrieval calls) opts in. `generate_answer` says
    `No relevant sources found to answer this question.` for no match. Each returned document writes an

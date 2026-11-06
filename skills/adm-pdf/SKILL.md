@@ -29,7 +29,7 @@ change. The work is done by AOP: without the setting `AOP_API_URL` an operation 
    watermark, protect, add_*, fill_form, flatten_form), because a change of one byte breaks the
    signature. Pass `p_invalidate_signatures => true` to make the result anyway. Read-only calls
    (`get_page_count`, `get_info`, `get_form_fields`, `get_attachments`, `validate`, `to_images`)
-   work on a signed PDF. In a folder with signing mode `SIGN`, a source that ADM signed needs no `true`.
+   work on a signed PDF. In a folder with signing mode `SIGN`, a source that ADM signed needs no `true` (not for `protect`, which is never auto-signed).
 3. **Names are derived.** Without `p_document_name` the result is `report (watermarked).pdf`,
    `(merged)`, `(protected)`, `(text)`, `(image)`, `(comments)`, `(numbered)`, `(filled)`,
    `(flattened)`, `(attachments)`, `(signed)` or `(part 1)`. A used name gets a number:
@@ -52,9 +52,9 @@ change. The work is done by AOP: without the setting `AOP_API_URL` an operation 
    an old signature stays valid only for its old bytes.
 8. **A failure of AOP** is `e_pdf_operation_failed` (`e_conversion_failed` for `convert_to_pdf`).
    Its text goes to the log, not the message. When another session takes the chosen name
-   in between, `e_doc_exists` is raised and nothing retries: roll back and call again.
+   in between, `e_doc_exists` (or the unique index `ADM_DOCUMENTS_LIVE_NAME_UK`) is raised and nothing retries: roll back and call again.
 9. **Embed sessions** need the grants `DOWNLOAD` (every source, also `get_info`, `validate`) and
-   `UPLOAD` or `UPLOAD_VERSION` (the result), else `e_no_permission`. An embed session cannot sign.
+   `UPLOAD` or `UPLOAD_VERSION` (the result), else `e_no_permission`. An embed session cannot call `sign`; auto-sign in a `SIGN` folder still applies.
 
 ## Recipes
 

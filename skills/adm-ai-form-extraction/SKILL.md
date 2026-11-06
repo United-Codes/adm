@@ -35,9 +35,12 @@ Never write the `config_json` columns directly: the packages validate them.
    quoted strings, `+ - * / ( ) , = <> != < <= > >=`, `and or not is null between in` and
    `abs round trunc sign nvl coalesce greatest least mod`. Anything else raises `e_form_expression`.
    A regex that does not compile is `e_form_regex`; a field the schema lacks is `e_form_unknown_field`.
+   Before the checks, every result must fit the `json_schema`: required keys present (null or blank
+   only when the type allows `"null"`), `string`/`number`/`integer`/`boolean` types, `enum` values,
+   and each line an object. A misfit is an issue, so the result goes to `REVIEW`.
 4. **Status.** `OK` (every check passed), `REVIEW` (a person must look; one line per issue in `issues`),
    `FAILED` (an error), `APPROVED`. Too little text (`min_text_chars`, default 20: a scan) goes to
-   review **without a model call**, as does text over `max_text_chars` (default 40000).
+   review **without a model call**, as does text over `max_text_chars` (no default: without it there is no limit).
 5. **`extract` writes nothing, `extract_document` writes and publishes.** `extract_document` stores one row
    per profile and document, sets the annotations `<doc_type>.<field>` (for `annotation_fields`) and removes
    the `review_tag` (default `extraction-review`) for `OK` and `APPROVED`, and does the opposite
@@ -48,8 +51,9 @@ Never write the `config_json` columns directly: the packages validate them.
    again. `p_corrections` holds only the changed fields, `p_line_items` all line items.
    `p_add_to_test_set` (default true) copies the result to the test set that `measure` runs on.
 7. **The hook `AFTER_FORM_EXTRACTION` runs for `OK` and `APPROVED`** with `:p_document_id`,
-   `:p_version_id`, `:p_profile_id`, `:p_extraction_id`, `:p_status`. A refusal (-20700 .. -20999) does
-   not reach the caller of `extract_document`: the row becomes `FAILED` with the message as issue.
+   `:p_version_id`, `:p_profile_id`, `:p_extraction_id`, `:p_status`. A hook error does
+   not reach the caller of `extract_document`: the row becomes `FAILED`. A refusal (-20700 .. -20999) keeps its
+   own message as the issue, and any other error is written as a sentence.
    For `approve` the error is raised and nothing changes.
 8. **Automatic processing:** with `"process_new_documents": true` the AI queue job extracts new documents
    (at most `max_documents_per_run`, default 20), as the system user, committing after each. A failure
@@ -145,7 +149,8 @@ The view also has `doc_type`, `method` (`TEXT`, `IMAGE`, `NONE`), `text_source` 
 
 **Measure before you trust it.** `set_expected` stores a known-good result as a test case. `measure(p_profile_id,
 p_label)` runs the pipeline over the test set (model calls, `p_model` and `p_vision_model` override) and stores
-the rows under the label. `delete_measurement` removes them.
+the rows under the label. Each test case is measured on the version it was stored for, and compared by
+the declared type (numbers to 0.005, integers exactly). `delete_measurement` removes them.
 
 ## Errors
 
