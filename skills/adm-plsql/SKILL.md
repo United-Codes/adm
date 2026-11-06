@@ -6,7 +6,7 @@ description: >
   owns the transaction, catching ADM errors (adm_error exceptions and category predicates), and
   what survives an upgrade. Read it before any code that calls an adm_ package, or any task about a
   document, folder, DMS or file store in this schema. Not the detail of documents, folders, search,
-  sharing, hooks, zip or RAG: see the routing table.
+  sharing, hooks, zip, PDF, RAG or form extraction: see the routing table.
 metadata:
   version: "26.2"
 ---
@@ -28,8 +28,9 @@ in your schema, or in one you have a grant on. There is no API key.
    the context first, so a failed login leaves no identity. A user with the ADMIN role gets the same
    bypass as `system_login`.
 3. **The context role is not the access right.** Only ADMIN changes what the API allows. A user with
-   the VIEW role and an EDIT share can still rename and version that document through the API.
-   Real access comes from ownership (`/users/<name>/...`) and shares: see `adm-sharing-and-permissions`.
+   the VIEW role and an EDIT share can still rename and version that document through the API (only the
+   file browser refuses every write of a VIEW role). Real access comes from ownership (`/users/<name>/...`)
+   and shares: see `adm-sharing-and-permissions`.
 4. **You own the transaction.** The document, folder, tag, share and zip APIs never commit or roll
    back, so a script that ends without `commit` did nothing. After an ADM call raises, your
    transaction is still open: roll back the whole unit. These procedures commit, so keep them out of
@@ -39,14 +40,14 @@ in your schema, or in one you have a grant on. There is no API key.
 5. **ADM errors are named exceptions, but your own SQL still raises Oracle errors.** Keep
    `no_data_found` and `dup_val_on_index` handlers for your own `select into` and `insert`. A value
    longer than its parameter type can raise `ORA-06502` before ADM validates it.
-6. **Ids are `number` with up to 32 digits.** `integer` is safe. `pls_integer`, `binary_integer`
-   (`ORA-01426`) and `number(n)` with n < 32 (`ORA-06502`) fail; JSON or JavaScript numbers lose digits: pass strings.
+6. **Ids are `number` with up to 32 digits.** `integer` is safe. `pls_integer`, `binary_integer` (`ORA-01426`)
+   and `number(n)` with n < 32 (`ORA-06502`) fail; JSON or JavaScript numbers lose digits: pass strings.
 7. **Read freely, write only through the packages.** A direct `insert` or `update` on an ADM table
    skips versions, audit entry, hook, storage policy and share revocation. Every table and column
    has a comment (`user_col_comments`).
 8. **`apex_session.attach` does not run the application's initialization code.** Without a new
-   context the job runs as the last user of the pooled connection. In your own application, attach, then
-   call `system_user_login`. `establish_for_callback` does clear, attach and `establish_from_session`.
+   context the job runs as the last user of the pooled connection. Attach, then call `system_user_login`.
+   `establish_for_callback` does clear, attach and `establish_from_session`.
 
 ## Recipes
 
@@ -152,9 +153,8 @@ too), `false` otherwise: check existence yourself.
 | `is_adm_error(sqlcode)` | True for ADM and AI Pack errors. False for Oracle errors and bundled libraries. |
 | `is_customer_error(sqlcode)` | True for -20700 to -20999, the range reserved for your code. |
 
-Raise your own errors only in -20700 to -20999; every other `-20xxx` number belongs to ADM, the AI
-Pack or a bundled library. A message from your range reaches the end user unchanged: write it for
-them, without `sqlerrm`.
+Raise your own errors only in -20700 to -20999; every other `-20xxx` number belongs to ADM, the AI Pack
+or a bundled library. A message from your range reaches the end user unchanged: no `sqlerrm`.
 
 ## Staying upgradeable
 
@@ -175,9 +175,11 @@ An upgrade replaces every ADM object and imports the APEX application again.
 | Query what exists, list what a user may see, report, audit trail, read a setting | `adm-querying` |
 | Tags, full-text and faceted search | `adm-search-and-tags` |
 | Share with users and groups, link shares, permission checks | `adm-sharing-and-permissions` |
-| React to an upload or a new folder | `adm-hooks` |
+| React to an upload, a delete, a move, a share or a retention event; refuse it | `adm-hooks` |
 | Pack and expand zip archives | `adm-zip` |
+| Merge, split, watermark, fill, sign PDFs; signing keys and folder signing policy | `adm-pdf` |
 | RAG over documents (AI Pack) | `adm-ai-rag` |
+| Extract fields from invoices and other PDF forms with a model (AI Pack) | `adm-ai-form-extraction` |
 
 For any signature, use the generated reference (<https://united-codes.com/products/apex-document-management/docs/api/>,
 `/docs/ai-pack-api/`) or the data dictionary:

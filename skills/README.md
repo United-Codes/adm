@@ -32,7 +32,7 @@ To select one skill, run:
 npx skills add United-Codes/adm --skill adm-plsql
 ```
 
-To install all nine skills for a specific agent, use `--skill '*'` and `--agent`:
+To install all eleven skills for a specific agent, use `--skill '*'` and `--agent`:
 
 ```sh
 npx skills add United-Codes/adm --skill '*' --agent claude-code
@@ -76,9 +76,11 @@ also ask for one by name ("use the adm-documents skill"). Each skill is a single
 | `adm-querying` | The session-scoped `adm_my_*_v` views, the unfiltered `adm_report_*_v` views, the core tables, restricting a query to what one user may see, the audit trail, reading a setting, and joining ADM ids to your own tables. |
 | `adm-search-and-tags` | Tags and tag values, full-text search, and faceted search. |
 | `adm-sharing-and-permissions` | Permission checks, shares, public link shares, embed tokens, users and groups. |
-| `adm-hooks` | The three hook events, and how raising in a hook refuses an upload. |
+| `adm-hooks` | The 13 hook events (14 with the AI Pack): uploads, folders, deletes, trash, moves, shares, retention, PDF signing and form extraction. How raising in a hook refuses the operation. |
 | `adm-zip` | Packing and expanding archives, the size guards, and the rollback they need. |
+| `adm-pdf` | PDF operations (merge, split, watermark, overlays, form fields, attachments, convert to PDF), digital signatures, signing keys, folder signing policy and the provenance of a PDF. |
 | `adm-ai-rag` | AI Pack only: RAG collections, chunk search, and generated answers. |
+| `adm-ai-form-extraction` | AI Pack only: extracting the fields of invoices and other PDF forms with a model, checks, review and approval. |
 
 ## Keeping in step
 
