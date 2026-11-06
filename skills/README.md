@@ -73,7 +73,7 @@ also ask for one by name ("use the adm-documents skill"). Each skill is a single
 | `adm-plsql` | **Read this one first.** Establishing a security context, who owns the transaction, catching ADM errors, and what keeps your code upgradeable. |
 | `adm-documents` | Uploading, versioning, reading content back, mime types, retention, legal hold, comments, annotations. |
 | `adm-folders` | Paths and ids, building nested structures, renaming, moving, and how the trash treats a subtree. |
-| `adm-querying` | The session-scoped `adm_my_*_v` views, the unfiltered `adm_report_*_v` views, the core tables, restricting a query to what one user may see, and joining ADM ids to your own tables. |
+| `adm-querying` | The session-scoped `adm_my_*_v` views, the unfiltered `adm_report_*_v` views, the core tables, restricting a query to what one user may see, the audit trail, reading a setting, and joining ADM ids to your own tables. |
 | `adm-search-and-tags` | Tags and tag values, full-text search, and faceted search. |
 | `adm-sharing-and-permissions` | Permission checks, shares, public link shares, embed tokens, users and groups. |
 | `adm-hooks` | The three hook events, and how raising in a hook refuses an upload. |

@@ -34,7 +34,9 @@ their trash; both exist as soon as the user does.
    nobody can rename, move, trash or delete it (`e_folder_system`). Leave it at `'N'`.
 5. **`trash_folder` takes the caller's own name in `p_user_id`.** A non-admin who names someone
    else gets `e_folder_trash_rule`. Use `sys_context(adm_context_api.c_ctx_namespace,
-   adm_context_api.c_ctx_username)`.
+   adm_context_api.c_ctx_username)`. Under `system_login` that name is `_UC_SYSTEM_`, which has
+   no trash, so the call raises `e_folder_not_found` (ORA-20170, "user folder ... does not
+   exist"). A script or an admin names a real user instead: the folder goes into that user's trash.
 6. **Trashing revokes access and restore does not give it back.** Folder shares, document shares,
    link shares and embed tokens for the whole subtree are deleted. After `restore_folder` the
    subtree is back, but with no shares. Grant them again, and tell the users.

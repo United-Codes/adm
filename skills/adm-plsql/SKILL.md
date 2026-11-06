@@ -172,7 +172,7 @@ An upgrade replaces every ADM object and imports the APEX application again.
 | --- | --- |
 | Upload, versions, read content, rename, trash, retention, legal hold | `adm-documents` |
 | Folder tree, move, trash, restore | `adm-folders` |
-| Query what exists, list what a user may see, report | `adm-querying` |
+| Query what exists, list what a user may see, report, audit trail, read a setting | `adm-querying` |
 | Tags, full-text and faceted search | `adm-search-and-tags` |
 | Share with users and groups, link shares, permission checks | `adm-sharing-and-permissions` |
 | React to an upload or a new folder | `adm-hooks` |

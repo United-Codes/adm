@@ -2,10 +2,10 @@
 name: adm-hooks
 description: >
   Writes, registers and tests ADM (APEX Document Management) hooks - your PL/SQL that ADM calls
-  on AFTER_NEW_FILE_UPLOAD, AFTER_NEW_FILE_VERSION and AFTER_NEW_FOLDER_CREATION. Use to refuse
-  an upload (by name, extension, size or folder), to enforce a naming rule, to queue work when a
-  file arrives or a folder is created, or when a task mentions adm_hooks, hook_plsql or
-  adm_hooks_api. Covers registering a hook from a script and why the caller must roll back a
+  on AFTER_NEW_FILE_UPLOAD, AFTER_NEW_FILE_VERSION, AFTER_NEW_FOLDER_CREATION and
+  AFTER_PDF_SIGNED. Use to refuse an upload (by name, extension, size or folder), to enforce a
+  naming rule, to queue work when a file arrives, a folder is created or ADM signs a PDF, or when
+  a task mentions adm_hooks, hook_plsql or adm_hooks_api. Covers registering a hook from a script and why the caller must roll back a
   refusal. Not for plain uploads (see adm-documents).
 metadata:
   version: "26.2"
@@ -21,6 +21,7 @@ the event's parameters bound by name. See `adm-plsql` for contexts and transacti
 | `AFTER_NEW_FILE_UPLOAD` | a new document is created | `:p_document_id`, `:p_version_id` |
 | `AFTER_NEW_FILE_VERSION` | a version is added to an existing document | `:p_document_id`, `:p_version_id` |
 | `AFTER_NEW_FOLDER_CREATION` | a folder is created | `:p_folder_id` |
+| `AFTER_PDF_SIGNED` | ADM signs a PDF and stores it (see gotcha 11) | `:p_document_id`, `:p_version_id`, `:p_signing_key_id` |
 
 ## Gotchas
 
@@ -35,7 +36,7 @@ the event's parameters bound by name. See `adm-plsql` for contexts and transacti
    including `-20001`, becomes `e_hook_failed` (-20109) with a generic message; your message
    goes to the `apex_debug` log. Test with `adm_error.is_customer_error(sqlcode)`. Write the
    message for the end user, without `sqlerrm`.
-4. **Registration replaces.** The three `adm_hooks` rows exist after install, and each holds one
+4. **Registration replaces.** The four `adm_hooks` rows exist after install, and each holds one
    snippet. `update adm_hooks set hook_plsql = ...` is the one supported direct write to an ADM
    table (the application's hook page stores its snippet in the same column). Read the old snippet first, and check
    `sql%rowcount`: an unknown `hook_key` updates nothing without an error. The row survives an
@@ -48,7 +49,8 @@ the event's parameters bound by name. See `adm-plsql` for contexts and transacti
    (the new `p_version_id` replaces the old one, and the old row is gone). It does not fire when
    the content equals the latest version. A queue worker must expect a stale id.
 7. **Every route fires the hooks**, including zip extraction (`adm-zip`): a refusing hook fails
-   the extraction at the refused file.
+   the extraction at the refused file. A PDF operation (`adm_pdf_api`) and a save in the PDF editor
+   fire the upload or version hook for the file they store.
 8. **A hook never commits**, except a refusal log in a procedure with `pragma autonomous_transaction`.
    A refused upload leaves no other trace.
 9. **A hook that creates a folder or document starts the hooks again** (limit: 10 levels, then
@@ -57,6 +59,14 @@ the event's parameters bound by name. See `adm-plsql` for contexts and transacti
    else gets `e_admin_required`. An administrator can bypass a refusing hook the same way.
 10. **Keep it short.** The user waits for the hook. Queue slow work, and do not send mail or call a
     web service (a rollback does not undo them). `dbms_scheduler.create_job` commits the caller.
+11. **`AFTER_PDF_SIGNED` fires only for a file that ADM signed itself.** That is a PDF operation
+    result or a PDF editor save in a folder with the signing mode `SIGN` (a signing policy, see the
+    admin documentation). It runs after the upload or version hook of the same file, once for each
+    signed file (a `split` into three parts runs it three times). `p_signing_key_id` is the key of
+    the setting `AUTO_SIGN_KEY_ID`. `protect`, `sign`, `to_images` and `get_attachments` do not
+    fire it, and `p_run_hooks => false` of the operation skips it. An error from it fails the
+    operation. A hook that changes the file adds a version that ADM did not sign: its provenance
+    is `MODIFIED` or `NOT_SIGNED` (`adm_pdf_api.get_provenance`).
 
 ## Recipes
 
@@ -111,7 +121,8 @@ end;
 ```
 
 Prove it with one refused and one accepted upload (replace `JDOE`). The caller rolls back the
-refusal:
+refusal. Check **whose** message it is: an older snippet runs first, so its refusal can hide
+a hook of yours that never ran.
 
 ```sql
 declare
@@ -136,6 +147,9 @@ begin
         raise;
       end if;
       dbms_output.put_line('refused: ' || sqlerrm);
+      if instr(sqlerrm, 'Executable files (.exe)') = 0 then
+        dbms_output.put_line('another hook refused first: your snippet was not tested');
+      end if;
       select count(*) into l_count from adm_documents
        where folder_id = l_folder_id and document_name = 'setup.exe';
       dbms_output.put_line('rows before rollback: ' || l_count);   -- 1: the row is still there
@@ -164,5 +178,6 @@ end;
 | `e_admin_required` (-20120) | a non-admin passed `p_run_hooks => false` |
 
 `adm_hooks_api` has nothing to call: its `run_*` procedures belong to the product. Its constants
-`c_after_new_file_upload`, `c_after_new_file_version` and `c_after_new_folder_creation` are the
-keys. For anything else, read the API reference or query `user_arguments`.
+`c_after_new_file_upload`, `c_after_new_file_version`, `c_after_new_folder_creation` and
+`c_after_pdf_signed` are the keys. For anything else, read the API reference or query
+`user_arguments`.

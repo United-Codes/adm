@@ -26,7 +26,9 @@ The content belongs to the version. `adm_documents.latest_version_id` points at 
    query. Never read `adm_document_versions.file_content` yourself: it is empty for object storage.
 2. **`get_file_content` does not check access.** Take the version id from `adm_my_documents_v`
    (`latest_version_id`) or `adm_my_document_versions_v`, or call
-   `adm_access_control_api.user_is_allowed_to_view_document(p_document_id => ...)` first.
+   `adm_access_control_api.user_is_allowed_to_view_document(p_document_id => ...)` first. It does
+   write a `READ_DOCUMENT` audit row, once per user, document and request, and none for `_UC_SYSTEM_`.
+   The row is committed at once and survives a rollback. Leave `p_audit_read` at `'Y'` in your code.
 3. **File content is a BLOB, so you convert text yourself.** `utl_raw.cast_to_raw` is enough for a
    short string. Use `apex_util.clob_to_blob(p_clob, p_charset => 'AL32UTF8')` and
    `apex_util.blob_to_clob(p_blob, p_charset => 'AL32UTF8')` for anything longer or non-ASCII.
@@ -52,7 +54,8 @@ The content belongs to the version. `adm_documents.latest_version_id` points at 
    trash with its folder cannot be restored alone (`e_doc_trash_rule`). On a name clash
    `restore_document` renames to `name_restored.ext`.
 9. **`trash_document(p_user_id => ...)` must name the current user.** Others get `e_doc_trash_rule`;
-   only ADMIN may name another user. `permanently_delete_document` works only on a trashed
+   only ADMIN may name another user, and that user must exist: the document goes to their trash, and
+   `_UC_SYSTEM_` has none (`e_folder_not_found`, see `adm-folders`). `permanently_delete_document` works only on a trashed
    document. Object-storage content is deleted later by a job. The daily job also deletes trash
    older than setting `CLEAN_TRASH_DAYS` (30 by default).
 10. **Retention and legal hold block deletion.** Any retention date blocks `trash_document`

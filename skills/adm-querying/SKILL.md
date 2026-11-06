@@ -5,7 +5,8 @@ description: >
   (what the logged-in user may see), the unfiltered adm_report_*_v reporting views, the core
   tables, access checks for one user, and linking ADM ids to your own tables. Use for an APEX
   report or REST feed over documents or folders, "documents this user can see", a storage or
-  audit report, or a foreign key to adm_documents or adm_folders. Not for full-text or tag
+  audit report, the audit trail of a document or user, reading a setting value from code, or a
+  foreign key to adm_documents or adm_folders. Not for full-text or tag
   search (see adm-search-and-tags) and not for changing data (see adm-documents, adm-folders).
 metadata:
   version: "26.2"
@@ -52,7 +53,8 @@ The twelve report views, as `adm_report_<name>_v`: `documents`, `document_versio
 5. **`adm_storage_api.get_file_content` does not check access.** Any user can read any version id
    they pass in. Take the `version_id` from `adm_my_documents_v.latest_version_id` or
    `adm_my_document_versions_v`. Do not read `adm_document_versions.file_content`: it is empty for
-   object storage.
+   object storage. Each read writes a `READ_DOCUMENT` row to the audit trail (once per user,
+   document and request, none for `_UC_SYSTEM_`), and the row survives a rollback.
 6. **Do not rebuild access rules with joins.** Home folders, group folders, direct and inherited
    shares and the administrator role all grant access. Ask `adm_access_control_api`, or use the views.
    In an `ADMIN` context, including `system_login`, every check answers yes and ignores `p_username`.
@@ -135,7 +137,25 @@ adm_audit_api.add_audit(
 );
 ```
 
-**5. Read column comments** (every table, view and column has one):
+**5. Audit trail and settings.** Admin reports, not session-scoped: the view returns every row.
+
+```sql
+select audit_id, action_date, action_type, user_id, user_access, action_details
+  from adm_report_audit_log_v
+ where document_id = :document_id            -- one document; or: user_id = upper(:username)
+ order by action_date, audit_id;             -- audit_id is not chronological
+```
+
+`user_id` is the user name as text, upper case, not a number. Audit rows outlive the document: after
+a permanent delete they stay, with `document_name` null. An action run under `system_login` is logged as `_UC_SYSTEM_`.
+Share rows name the recipient by numeric id in `action_details`.
+
+Read a setting with `adm_settings_api.get_setting_value(p_setting_key => 'CLEAN_TRASH_DAYS')`
+(the column is `adm_settings.sett_value`) or a typed getter such as `get_clean_trash_days` and
+`is_object_storage_enabled`. An unknown key returns null. Keys marked `is_admin_only` (credentials)
+raise `e_admin_required` for a non-admin.
+
+**6. Read column comments** (every table, view and column has one):
 
 ```sql
 select c.column_name, c.comments
@@ -152,9 +172,10 @@ select c.column_name, c.comments
 | `adm_error.e_user_not_found` | `system_user_login` for a name that is not in `adm_users` |
 | `adm_error.e_no_permission` | `system_user_login` for a deactivated user |
 | `adm_error.e_version_not_found` | `get_file_content` for an unknown `p_version_id` |
+| `adm_error.e_admin_required` | `get_setting_value` of an `is_admin_only` key by a non-admin |
 | `ORA-12899` (not an ADM error) | `add_audit` with a `p_action_type` longer than 50 characters |
 
 Everything else: the generated reference at
 <https://united-codes.com/products/apex-document-management/docs/views/> and `/docs/api/`. Parameters of a call:
 `select argument_name, data_type, in_out, defaulted from user_arguments where package_name = 'ADM_X' and object_name = 'PROC'`.
-For tables, read the comments (recipe 5).
+For tables, read the comments (recipe 6).

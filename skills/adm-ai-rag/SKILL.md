@@ -157,7 +157,7 @@ adm_ai_rag_api.generate_answer_debug(p_rag_collection_id => l_collection_id, p_q
 ### Check progress, or force the pipeline
 
 ```sql
-select collection_status, active_file_count, pending_chunk_count, failed_jobs_count   -- ERROR, PROCESSING, PENDING, INCOMPLETE, READY
+select collection_status, active_file_count, searchable_file_count, failed_file_count   -- ERROR, PROCESSING, PENDING, INCOMPLETE, EMPTY, READY
   from adm_ai_rag_collection_status_v
  where rag_collection_id = :id;
 
