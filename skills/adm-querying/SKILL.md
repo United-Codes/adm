@@ -21,19 +21,25 @@ transactions see `adm-plsql`.
 
 | I need | Use |
 | --- | --- |
-| A list for the logged-in user: report, region, REST feed | `adm_my_*_v` (six views, below) |
-| An administrator report over the whole instance | `adm_report_*_v` (twelve views, below) |
+| A list for the logged-in user: report, region, REST feed | `adm_my_*_v` (nine base views, below) |
+| An administrator report over the whole instance | `adm_report_*_v` (13 views, below) |
 | "May user X see document Y", for one id or for another user | `adm_access_control_api` |
 | Documents that match a word or a tag | `adm_search_api` (see `adm-search-and-tags`) |
 | A column no view carries | the core tables, with the filters in gotcha 4 |
 
-The six session views: `adm_my_documents_v` (with the latest version's number and size),
+The nine session views: `adm_my_documents_v` (with the latest version's number and size),
 `adm_my_folders_v`, `adm_my_document_versions_v`, `adm_my_document_tags_v`,
-`adm_my_document_annotations_v`, `adm_my_folder_annotations_v`.
+`adm_my_document_annotations_v`, `adm_my_folder_annotations_v`, `adm_my_recent_documents_v` (the user's
+Recent list: `last_action`, `last_action_at`, `action_count`), `adm_my_color_labels_v` (`item_type`,
+`document_id` or `folder_id`, `color`, `color_name`) and `adm_my_color_label_names_v`. Recent and color
+labels are the user's own: write them with `adm_user_items_api` (`add_color_label`, `set_color_name`,
+`remove_recent_document`), which takes no username. The AI Pack adds `adm_my_form_extractions_v` (ten in
+all; see `adm-ai-form-extraction`).
 
-The twelve report views, as `adm_report_<name>_v`: `documents`, `document_versions`, `folders`,
+The 13 report views, as `adm_report_<name>_v`: `documents`, `document_versions`, `folders`,
 `document_shares`, `folder_shares`, `users`, `groups`, `tags`, `audit_log`, `file_type_analysis`,
-`system_overview` (a key/value list of metrics, not one row) and `job_status`.
+`system_overview` (a key/value list of metrics, not one row), `job_status` and `pdf_provenance` (one row per
+PDF version: `pdf_provenance`, `no_longer_pure_adm`, see `adm-pdf`).
 
 ## Gotchas
 
@@ -49,7 +55,10 @@ The twelve report views, as `adm_report_<name>_v`: `documents`, `document_versio
 4. **Report views and tables include trash and archive.** Filter `deleted_flag = 'N'` (set on every
    row below a trashed folder, not only on the folder you trashed) and, on documents,
    `archived_flag = 'N'`. `document_status` in `adm_report_documents_v` is one label for three
-   independent flags: an archived document on legal hold reads `ARCHIVED`.
+   independent flags: an archived document on legal hold reads `ARCHIVED`. `legal_hold_flag` and
+   `retention_delete_date` are the document's **own** hold and retention. What really governs it, folder rules
+   included, is `under_legal_hold`, `effective_retention_date`, `effective_retention_end_action` and the
+   `*_system_flag` columns (see `adm-documents`).
 5. **`adm_storage_api.get_file_content` does not check access.** Any user can read any version id
    they pass in. Take the `version_id` from `adm_my_documents_v.latest_version_id` or
    `adm_my_document_versions_v`. Do not read `adm_document_versions.file_content`: it is empty for

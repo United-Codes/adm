@@ -142,12 +142,14 @@ p_potential_child_id)` is true for the same folder, too.
 | `move_folder` | already in that parent | `e_invalid_state` |
 | `add_folder`, `rename_folder` | forbidden character, leading or trailing space | `e_invalid_name` |
 | `permanently_delete_folder` | document on hold or under retention | `e_folder_has_protected` |
+| `trash_folder` | a hold or retention rule covers, sits above or is inside the folder | `e_folder_hold_blocks`, `e_folder_retention_blocks` |
 | `move_document`, `move_folder` | content leaves a folder under a hold or a protecting retention rule | `e_hold_move_out`, `e_retention_move_out` |
 
 ## Folder legal hold and folder retention
 
 Both cover the folder and everything below it, also files added later. Removing the rule restores
-the earlier state. Needs owner rights on the folder. `p_system => true` needs ADMIN.
+the earlier state. Needs owner rights on the folder. **System level:** `p_system => true` (hold or rule) needs
+ADMIN, and only an administrator can lift a system hold (`e_system_admin_required` otherwise).
 
 ```sql
 adm_folder_api.add_legal_hold(p_folder_id => l_folder_id, p_reason => 'Case 4711');
@@ -163,12 +165,16 @@ adm_folder_api.remove_retention(p_folder_id => l_folder_id);
 - A document ends at its **creation date plus the period**. The latest end date of all rules wins.
 - The job deletes a document only when all its rules have ended, one of them is `DELETE`, and no
   hold covers it. `RELEASE` means no automatic deletion, not "keep forever".
-- One active rule or hold per folder (`e_folder_retention_exists`, `e_folder_hold_exists`). The
-  period is at most 36500 days, 1200 months or 100 years (`e_retention_invalid`).
-- A running **system** retention cannot be removed or shortened by anyone
-  (`e_system_retention_locked`). Only extend it.
+- A `DELETE` rule on a folder whose documents are already past the period is refused (`e_retention_invalid`)
+  unless `p_confirm_immediate_delete => true`: the job then deletes them for good.
+- One active rule or hold per folder (`e_folder_retention_exists`, `e_folder_hold_exists`). Lifting or
+  removing what is not there raises `e_folder_hold_missing` or `e_folder_retention_missing`. The period is at
+  most 36500 days, 1200 months or 100 years (`e_retention_invalid`).
+- A running **system** retention cannot be removed or shortened by anyone, not even an administrator
+  (`e_system_retention_locked`). Only extend it. A system rule on a user rule replaces it, with a period
+  that is not shorter.
 - `is_under_retention`, `contains_retention` and `get_effective_retention_date` answer for a folder.
 
 Listing what is in a folder, for the current user only, is in `adm-querying`. For anything else,
 read the API reference or query `user_arguments where package_name = 'ADM_FOLDER_API'`
-(`argument_name, data_type, in_out, defaults`).
+(`argument_name, data_type, in_out, defaulted`).

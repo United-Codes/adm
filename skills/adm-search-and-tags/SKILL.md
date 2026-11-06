@@ -53,9 +53,11 @@ A tag (`adm_tags`) is a name. Attached to a document (`adm_document_tags`) it ca
 8. **`p_facet_and_match` accepts exactly `'Y'` (every facet) or `'N'` (any facet, the default).** Any
    other text, including `'y'`, returns nothing. A tag value that contains `:G#` or `:I#` cannot be
    searched.
-9. **Tag names are trimmed and lower-cased; values keep their case.** `add_tag_to_document` creates a
-   tag that does not exist yet. Tagging needs EDIT rights on the document (`e_no_permission`); a
-   trashed or unknown document raises `e_doc_not_found`.
+9. **Tag names are trimmed and lower-cased** (a trigger enforces it); values keep their case. `create_tag`
+   and `add_tag_to_document` create a tag that does not exist yet, but **only an administrator may** unless
+   the setting `USERS_CAN_CREATE_TAGS` is `Y` (default `N`): then `e_no_permission`. Assigning an existing tag
+   needs no such right, only EDIT on the document (`e_no_permission`); a trashed or unknown document raises
+   `e_doc_not_found`.
 10. **Writes are idempotent, deletes are not.** `add_tag_to_document` and `create_document_tag` on a
     document that has the tag replace its value (`create_document_tag` returns the existing id).
     `remove_document_tag` raises `e_tag_not_found` for an unknown tag and `e_tag_not_assigned` when the
@@ -154,7 +156,7 @@ select count(*) from adm_indexing_queue where index_status = 'PENDING';   -- rep
 | --- | --- |
 | `adm_error.e_missing_param` | `search_user_documents` with a null `p_username`; `create_tag` with a blank name |
 | `adm_error.e_doc_not_found` | tagging a trashed or unknown document |
-| `adm_error.e_no_permission` | tagging a document without EDIT rights |
+| `adm_error.e_no_permission` | tagging a document without EDIT rights; creating a new tag as non-admin while `USERS_CAN_CREATE_TAGS` is `N` |
 | `adm_error.e_tag_not_found` | `remove_document_tag` or a `document_tag_id` call for an unknown tag |
 | `adm_error.e_tag_not_assigned` | `remove_document_tag` or `update_document_tag_value` by name, tag not on the document |
 | `adm_error.e_tag_ambiguous` | a by-name update of a tag that the document carries twice |

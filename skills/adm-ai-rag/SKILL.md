@@ -35,8 +35,9 @@ is not yet answerable.
    only `vector_store`, `vector_index` and the four `default_*` keys are carried over when omitted.
    Leave out `embedding` and it raises `e_config_missing`; leave out `chunks`, `answer_model` or
    `query_rewriting` and it is dropped. Read the stored `config_json`, change it, pass it back whole.
-   `embedding.dimensions` cannot change once the store exists (`e_vector_dims_immutable`).
-   `p_collection_name` and `p_description` change on their own.
+   `embedding.provider`, `model`, `dimensions` and `vector_store` cannot change: the vectors were built
+   with them (`e_embedding_locked`, create a new collection). `p_collection_name` and `p_description` change
+   on their own. A null `p_description` keeps the text: pass `p_clear_description => true` to clear it.
 5. **`vector_store` defaults to `ORACLE` on 23ai and later, `QDRANT` below** (a legacy collection
    without the key is `QDRANT`). `ORACLE` on 19c raises `e_no_vector_support`. If the vector index is
    missing, searches fall back to an exact scan without a message: check
@@ -50,20 +51,28 @@ is not yet answerable.
    `AI_CHUNK_FILE_LIMIT` files per call, so one call may not finish the work. Do not call
    `sync_rag_collection_files` first. A sync that finds another one running skips silently.
 8. **Retrieval applies the caller's rights after the top-k cut.** `search_chunks` can return fewer rows
-   than `p_limit`. `system_login` matches everything: use `system_user_login` for a person. An ADMIN
-   person gets the personal view; `p_as_admin => true` (all four retrieval calls) opts in to every
-   document. `generate_answer` says `No relevant sources found to answer this question.` for no match.
+   than `p_limit`. Only the system user (`system_login`, the jobs) sees every document: use
+   `system_user_login` for a person. An ADMIN person gets the **personal** view too, not the whole
+   instance: `p_as_admin => true` (all four retrieval calls) opts in. `generate_answer` says
+   `No relevant sources found to answer this question.` for no match. Each returned document writes an
+   `AI_READ_DOCUMENT` audit row for a user.
 9. **`p_document_id` exists on `search_chunks` and `prepare_sources` only.** It needs `ORACLE`
     (`e_no_doc_scoped_search`, raised before the embedding call); a document not active in the collection
     gives no rows. `p_rewrite_config` and `p_answer_config` are `json_object_t`, merged
     over the config (your keys win). `generate_answer_debug` is a **procedure**
-    (`po_answer`, `po_debug_log_id`).
-10. **Query rewriting is an extra LLM call.** `p_rewrite_query => true` needs provider and model from the
-    config's `query_rewriting` or from `p_rewrite_provider` / `p_rewrite_model` (else `e_config_missing`).
-    With `query_rewriting.enabled: true` in the config, every search rewrites unless you pass `false`.
+    (`po_answer`, `po_debug_log_id`; then `get_debug_log_markdown`).
+10. **Query rewriting is an extra LLM call.** `p_rewrite_query => true` needs provider and model from
+    `query_rewriting` in the config or from `p_rewrite_provider` / `p_rewrite_model` (else `e_config_missing`).
+    With `query_rewriting.enabled: true`, every search rewrites unless you pass `false`.
 11. **Defaults:** argument, then the collection's `default_*`, then threshold 0.5, limit 20, 5 sources, 1
-    surrounding chunk. A good threshold depends on the embedding model: lower it if a filled collection
-    finds nothing. With `hybrid_search`, `score` is an RRF score, not a cosine similarity.
+    surrounding chunk. Lower the threshold if a filled collection finds nothing. With `hybrid_search`,
+    `score` is an RRF score, not a cosine similarity.
+12. **Scans and images have no text.** The built-in reader stores an empty text for a scan, and the file
+    shows `EMPTY`. `ocr_text_extraction` in the config reads them per collection. The global OCR fallback
+    reads them for every collection once the setting `AI_OCR_FALLBACK_CONFIG` holds a JSON configuration
+    (provider, `config`, `apply_to`, `min_text_chars`, default 20) and `AI_TEXT_EXTRACTION` is `Y`.
+    It **ships empty**: OCR sends the file to an external service. The text belongs to the version: the first
+    collection that indexes it decides the reader.
 
 ## Recipes
 
@@ -80,19 +89,11 @@ begin
     "source_folder_path": "/cases",
     "content_type": "text",
     "vector_store": "ORACLE",
-    "default_score_threshold": 0.5,
     "embedding": {
-      "dimensions": 1536,
-      "provider": "openai",
-      "model": "text-embedding-3-small",
+      "dimensions": 1536, "provider": "openai", "model": "text-embedding-3-small",
       "config": { "g_apex_web_credential": "OPENAI_API_KEY" }
     },
-    "chunks": {
-      "target_chunk_size": 2048,
-      "overlap_size": 256,
-      "min_chunk_size": 512,
-      "max_chunk_size": 2560
-    },
+    "chunks": { "target_chunk_size": 2048, "overlap_size": 256, "min_chunk_size": 512, "max_chunk_size": 2560 },
     "answer_model": {
       "provider": "openai",
       "model": "gpt-4o",
@@ -116,16 +117,8 @@ end;
 `llm_text_extraction`, `ocr_text_extraction`, `hybrid_search`, `vector_index`):
 <https://united-codes.com/products/apex-document-management/docs/ai-pack-guides/rag_configurations/>
 
-Change a setting: read the stored config, edit it, pass all of it back (gotcha 4).
-
-```sql
-select config_json into l_config from adm_ai_rag_collections where rag_collection_id = l_collection_id;
-l_obj := json_object_t.parse(l_config);                     -- l_obj json_object_t
-l_obj.put('default_score_threshold', 0.4);
-adm_ai_rag_api.update_rag_collection(p_rag_collection_id => l_collection_id, p_config_json => l_obj.to_clob);
-```
-
-`delete_rag_collection` takes `p_rag_collection_id` or `p_collection_name`.
+Change a setting: read the stored `config_json`, edit it with `json_object_t`, pass all of it back to
+`update_rag_collection` (gotcha 4). `delete_rag_collection` takes `p_rag_collection_id` or `p_collection_name`.
 
 ### Ask a question
 
@@ -149,16 +142,18 @@ l_answer := adm_ai_rag_api.generate_answer(   -- clob; per-call p_answer_provide
   p_rag_collection_id => l_collection_id
 , p_query             => :P1_QUESTION
 );
-
-adm_ai_rag_api.generate_answer_debug(p_rag_collection_id => l_collection_id, p_query => :P1_QUESTION
-, po_answer => l_answer, po_debug_log_id => l_log_id);   -- then get_debug_log_markdown(p_debug_log_id => l_log_id)
 ```
 
 ### Check progress, or force the pipeline
 
 ```sql
 select collection_status, active_file_count, searchable_file_count, failed_file_count   -- ERROR, PROCESSING, PENDING, INCOMPLETE, EMPTY, READY
+     , empty_file_count, unindexed_file_count, extraction_mismatch_count
   from adm_ai_rag_collection_status_v
+ where rag_collection_id = :id;
+
+select document_name, file_status, extraction_method, requested_extraction_method, latest_error_message
+  from adm_ai_rag_collection_files_v     -- file_status: ERROR, PROCESSING, PENDING, INCOMPLETE, EMPTY, NOT_INDEXED, INDEXED
  where rag_collection_id = :id;
 
 select adm_ai_rag_workflow_api.pending_work_count(p_stage => 'EMBEDDING', p_collection_id => :id)
@@ -166,14 +161,18 @@ select adm_ai_rag_workflow_api.pending_work_count(p_stage => 'EMBEDDING', p_coll
 ```
 
 Stages: `LOCAL_EXTRACTION`, `TEXT_EXTRACTION`, `CHUNKING`, `EMBEDDING`, `REMOVE` (also `QDRANT_CLEANUP`,
-`OCR_FALLBACK`). In SQL pass the string: a package constant (`c_stage_embedding`) is not allowed there.
-Always pass the collection for `LOCAL_EXTRACTION` and `CHUNKING`. Only `TEXT_EXTRACTION`, `EMBEDDING` and
-`REMOVE` have rows in `adm_ai_rag_job_queue`; the others follow file state. The count honours the retry
-budget, so a failing file stops being pending. To force a run, call
+`OCR_FALLBACK`). In SQL pass the string: a package constant is not allowed there. Always pass the collection for
+`LOCAL_EXTRACTION` and `CHUNKING`. Only `TEXT_EXTRACTION`, `EMBEDDING` and `REMOVE` have rows in
+`adm_ai_rag_job_queue`. The count honours the retry budget. To force a run, call
 `rag_collection_maintenance(p_collection_id => l_id)` and `commit`, again until every stage you use
-reports 0 (cap the loop). Single stages: `process_collection_text_extraction`,
+reports 0 (cap the loop). `EMPTY` files (no text) do not block `READY`; `extraction_mismatch` is informational. Single stages: `process_collection_text_extraction`,
 `process_text_extraction_jobs`, `process_collection_chunks`, `process_embedding_jobs`,
 `process_remove_jobs` (each takes `p_limit`).
+
+**Rebuild** after a change that applies only to files not chunked yet (chunk sizes):
+`adm_ai_rag_admin_api.rebuild_collection(p_collection_id)` (administrator) deletes chunks, vectors and queue
+rows, keeps config, membership and extracted text, and indexes nothing: the next maintenance run chunks and
+embeds every file again (one embedding call per chunk). `e_indexing_running` while a job runs.
 
 ## Errors
 
@@ -182,9 +181,10 @@ reports 0 (cap the loop). Single stages: `process_collection_text_extraction`,
 | `e_collection_not_found` | unknown id or name in any collection call or `search_chunks` |
 | `e_config_not_json`, `e_config_missing`, `e_config_invalid` | config is not JSON; a required key is absent; bad value, bad name, `llm` plus `ocr` |
 | `e_chunk_config`, `e_unsupported_value` | chunk sizes contradict each other; `content_type`, `vector_store` or `distance_metric` not allowed (also an unknown `p_stage`) |
-| `e_no_vector_support`, `e_vector_dims_immutable`, `e_no_doc_scoped_search` | gotchas 4, 5 and 9 |
+| `e_no_vector_support`, `e_embedding_locked`, `e_no_doc_scoped_search` | gotchas 5, 4 and 9 |
+| `e_indexing_running` | `rebuild_collection` while a background run or job of the collection is active |
 | `e_admin_required` | create, update or delete without an ADMIN context |
 
 `e_embedding` and `e_generation` exist, but the AI Pack never raises them: do not expect them for a provider failure.
 Anything else: the API reference, or
-`select argument_name, data_type, in_out, defaults from user_arguments where package_name = 'ADM_AI_RAG_API' and object_name = 'SEARCH_CHUNKS'`.
+`select argument_name, data_type, in_out, defaulted from user_arguments where package_name = 'ADM_AI_RAG_API' and object_name = 'SEARCH_CHUNKS'`.
