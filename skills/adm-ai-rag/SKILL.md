@@ -67,12 +67,12 @@ is not yet answerable.
 11. **Defaults:** argument, then the collection's `default_*`, then threshold 0.5, limit 20, 5 sources, 1
     surrounding chunk. Lower the threshold if a filled collection finds nothing. With `hybrid_search`,
     `score` is an RRF score, not a cosine similarity.
-12. **Scans and images have no text.** The built-in reader stores an empty text for a scan, and the file
-    shows `EMPTY`. `ocr_text_extraction` in the config reads them per collection. The global OCR fallback
-    reads them for every collection once the setting `AI_OCR_FALLBACK_CONFIG` holds a JSON configuration
-    (provider, `config`, `apply_to`, `min_text_chars`, default 20) and `AI_TEXT_EXTRACTION` is `Y`.
-    It **ships empty**: OCR sends the file to an external service. The text belongs to the version: the first
-    collection that indexes it decides the reader.
+12. **Scans may get only their PDF title as text** and still show `INDEXED`. Read them with
+    `ocr_text_extraction` or `llm_text_extraction` limited by an annotation, and make sure that
+    `extraction_method` is `LLM` or `OCR` (`FILTER` means the model did not read it). Text that a collection
+    chunked is never replaced: save a new version. The global OCR fallback reads scans for every collection
+    once `AI_OCR_FALLBACK_CONFIG` holds JSON (provider, `config`, `apply_to`, `min_text_chars`, default 20) and
+    `AI_TEXT_EXTRACTION` is `Y`. It **ships empty** (external service). The first collection that chunks decides.
 
 ## Recipes
 
