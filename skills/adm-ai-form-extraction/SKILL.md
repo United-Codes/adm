@@ -38,6 +38,9 @@ Never write the `config_json` columns directly: the packages validate them.
    Before the checks, every result must fit the `json_schema`: required keys present (null or blank
    only when the type allows `"null"`), `string`/`number`/`integer`/`boolean` types, `enum` values,
    and each line an object. A misfit is an issue, so the result goes to `REVIEW`.
+   A schema with `line_items` sends an empty table to `REVIEW` (`no line items`) unless the doc
+   type sets `"allow_empty_line_items": true`; then the checks run with `line_count` 0 and the
+   aggregates null, so write them with `nvl(sum_<col>, 0)`.
 4. **Status.** `OK` (every check passed), `REVIEW` (a person must look; one line per issue in `issues`),
    `FAILED` (an error), `APPROVED`. Too little text (`min_text_chars`, default 20: a scan) goes to
    review **without a model call**, as does text over `max_text_chars` (no default: without it there is no limit).
@@ -66,6 +69,12 @@ Never write the `config_json` columns directly: the packages validate them.
    `min_text_chars` at or below the fallback's (default 20).
 10. **Images** go to the `vision_model` (no model: review) unless `ocr_text_extraction.apply_to.mime_types`
     names their type. A model call and OCR write an `AI_READ_DOCUMENT` audit row for a user.
+    A form with `"model_input": "file"` (default `text`) is still found by its markers, but sends the file
+    to the `vision_model` to read the values (method `FILE`): for grids with empty cells and check boxes,
+    whose layout the text loses. It needs a `vision_model` of `openai`, `anthropic`, `google`, `oci`,
+    `mistral` or `responses_api` (not `ollama`) and no `line_pattern`; `update_profile` refuses to break
+    such a form. Only PDFs and `image/*` up to the profile's `max_file_bytes` (default 20 MB) are sent;
+    other files go to `REVIEW` without a call.
 11. **No procedure commits.** `start_processing` and `start_measurement` create a scheduler job in an
     autonomous transaction.
 
@@ -142,7 +151,7 @@ select x.document_name, x.status, x.form_code, x.issues
    and x.status in ('OK', 'APPROVED');
 ```
 
-The view also has `doc_type`, `method` (`TEXT`, `IMAGE`, `NONE`), `text_source` (`FILTER`, `OCR`),
+The view also has `doc_type`, `method` (`TEXT`, `IMAGE`, `FILE`, `NONE`), `text_source` (`FILTER`, `OCR`),
 `line_items`, `model`, token counts, `seconds`, `reviewed_by`. The administrative view
 `adm_ai_form_profile_status_v` counts results by status per profile (`ok_count`, `review_count`,
 `failed_count`, `approved_count`, `test_case_count`) and ignores access rights.
