@@ -9,7 +9,8 @@
 --
 -- Part A  The tool function, called directly as each user: no agent, no model. This is the
 --         deterministic proof that the filter is in the database and not in the prompt.
--- Part B  The same call with p_limit => 1 and 2: "nothing found" because of recall, not permission.
+-- Part B  The same call with p_limit 1, 2, 3 and 20 and threshold 0.3: the search skips chunks
+--         the user cannot read and takes more candidates.
 -- Part C  The same questions through the agent, as each user.
 
 -- @dblinter ignore(g-5010): a tutorial script prints its results with dbms_output on
@@ -53,7 +54,7 @@ begin
   show('AIC_LEGAL', 'aic_policies',  'salary band senior engineer');
 
   sys.dbms_output.put_line(null);
-  sys.dbms_output.put_line('=== Part B: p_limit. The vector search returns the top k chunks, THEN the access filter runs ===');
+  sys.dbms_output.put_line('=== Part B: p_limit. The search skips chunks the user may not read and takes more candidates ===');
   sys.dbms_output.put_line('(query "exclusive distribution Austria Switzerland": the two best chunks are both from the Helios contract)');
   show('AIC_LEGAL', 'aic_contracts', 'exclusive distribution Austria Switzerland', 1, 0.3);
   show('AIC_HR',    'aic_contracts', 'exclusive distribution Austria Switzerland', 1, 0.3);
