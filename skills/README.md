@@ -3,7 +3,7 @@
 Skills that teach an AI coding agent how to write correct PL/SQL against **APEX Document
 Management (ADM) 26.2**. Drop them into a project and your agent stops guessing at ADM's API:
 it knows that a session needs a context first, that no ADM package commits, that file content
-is read through `adm_storage_api.get_file_content` rather than off a BLOB column, and which
+is read through `adm_document_api.get_content` (permission-checked) rather than off a BLOB column, and which
 signatures are real.
 
 They cover the **public** API only — nothing marked `@private`, which is what stops your code

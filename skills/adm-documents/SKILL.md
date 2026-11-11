@@ -2,7 +2,7 @@
 name: adm-documents
 description: >
   Create, version, read, rename, move, trash, restore and permanently delete documents in APEX
-  Document Management (ADM) from PL/SQL: adm_document_api, adm_storage_api.get_file_content,
+  Document Management (ADM) from PL/SQL: adm_document_api (get_content), adm_storage_api.get_file_content (unchecked),
   adm_mimetype_api, retention, legal hold, comments and annotations (adm_annotations_api). Use for
   any task that uploads a file into ADM, reads file content back (as BLOB or text), adds or
   restores a version, or deletes a document. Context, transaction and error basics are in
@@ -20,15 +20,18 @@ The content belongs to the version. `adm_documents.latest_version_id` points at 
 
 ## Gotchas
 
-1. **Read content with a PL/SQL assignment, never `select ... into`.**
-   `l_blob := adm_storage_api.get_file_content(p_version_id => ..., p_from_sql => false)`. For
-   object storage, `false` queues text extraction, which is DML and raises `ORA-14551` inside a
-   query. Never read `adm_document_versions.file_content`: it is empty for object storage.
-2. **`get_file_content` does not check access.** Take the version id from `adm_my_documents_v`
-   (`latest_version_id`) or `adm_my_document_versions_v`, or call
-   `adm_access_control_api.user_is_allowed_to_view_document(p_document_id => ...)` first. It does
-   write a `READ_DOCUMENT` audit row, once per user, document and request, and none for `_UC_SYSTEM_`.
-   The row is committed at once and survives a rollback. Leave `p_audit_read` at `'Y'` in your code.
+1. **Read content with `adm_document_api.get_content`, in a PL/SQL assignment, never
+   `select ... into`.** `l_blob := adm_document_api.get_content(p_document_id => ..., p_version_id => ...)`;
+   a null `p_version_id` reads the latest version. It checks that the context user may view the
+   document (and, in an embed session, that the token holds DOWNLOAD), audits `READ_DOCUMENT`
+   (nothing for `_UC_SYSTEM_`) and fetches object storage content. Never read
+   `adm_document_versions.file_content`: it is empty for object storage.
+2. **`adm_storage_api.get_file_content` does not check access.** It is the storage layer under
+   `get_content`: any version id works, so use it only after your own check (take the version id
+   from `adm_my_documents_v` or `adm_my_document_versions_v`). In PL/SQL pass `p_from_sql => false` (the default `true` is for SQL calls; for object storage `false`
+   queues text extraction, which is DML and raises `ORA-14551` inside a query). Its `READ_DOCUMENT` audit row, once
+   per user, document and request, is committed at once and survives a rollback. Leave
+   `p_audit_read` at `'Y'` in your code.
 3. **File content is a BLOB, so you convert text yourself.** `utl_raw.cast_to_raw` is enough for a
    short string. Use `apex_util.clob_to_blob(p_clob, p_charset => 'AL32UTF8')` and
    `apex_util.blob_to_clob(p_blob, p_charset => 'AL32UTF8')` for anything longer or non-ASCII.
@@ -100,11 +103,7 @@ begin
   , p_overwrite      => false
   );
 
-  select latest_version_id
-    into l_version_id
-    from adm_my_documents_v
-   where document_id = l_document_id;               -- no_data_found: caller may not see it
-  l_blob := adm_storage_api.get_file_content(p_version_id => l_version_id, p_from_sql => false);
+  l_blob := adm_document_api.get_content(p_document_id => l_document_id);  -- e_no_permission: caller may not view it
   l_text := apex_util.blob_to_clob(p_blob => l_blob, p_charset => 'AL32UTF8');
 
   l_version_id := adm_document_api.add_document_version(
@@ -175,7 +174,7 @@ end if;
 | Exception | Raised when |
 | --- | --- |
 | `e_doc_not_found` (not found) | Unknown or trashed id, in create-version, rename, move, trash, restore, delete, retention, hold |
-| `e_version_not_found` (not found) | Unknown version in `get_file_content`, `get_file_size`, `restore_document_version`, `delete_document_version` |
+| `e_version_not_found` (not found) | Unknown version in `get_file_size`, `adm_storage_api.get_file_content`, a version of another document in `get_content`, `restore_document_version`, `delete_document_version` |
 | `e_folder_not_found` (not found) | Unknown folder in `create_document` or `move_document` |
 | `e_doc_exists` (conflict) | The name is taken in the folder (create, rename, move) |
 | `e_invalid_name` (invalid input) | Name rule broken, or rename to the current name |
@@ -183,7 +182,8 @@ end if;
 | `e_legal_hold_active`, `e_retention_active` (invalid state) | Trash or delete of a protected document, also when a folder hold or rule covers it |
 | `e_hold_move_out`, `e_retention_move_out` (invalid state) | `move_document` out of a folder under a hold or a retention rule |
 | `e_system_admin_required` (no permission), `e_system_retention_locked` (invalid state) | Place or lift a system item as non-admin, or remove a running system retention |
-| `e_no_permission` (no permission) | No context, or rights are too low. Comments on an unknown document give this too. |
+| `e_no_permission` (no permission) | No context, or rights are too low. Comments on an unknown document give this too. `get_content`: no view right (also an unknown id, except for an administrator: `e_doc_not_found`), or an embed token without DOWNLOAD. |
+| `e_no_current_version` (invalid state) | `get_content` with a null `p_version_id` on a document without a version |
 | `e_limit_exceeded` (invalid input) | File larger than setting `FS_UPLOAD_MAX_FILE_BYTES` |
 
 For several codes at once, use `adm_error.is_not_found(sqlcode)` and the other predicates. For any

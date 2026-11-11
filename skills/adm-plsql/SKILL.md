@@ -20,8 +20,8 @@ in your schema, or in one you have a grant on. There is no API key.
 
 1. **Without a context every check refuses.** ADM checks the session context (`ADM_CONTEXT`), never
    the database user. Writes raise `adm_error.e_no_permission` (-20121) and the `adm_my_*_v` views
-   return zero rows. A few reads (`adm_folder_api.get_folder_id`, `adm_storage_api.get_file_content`)
-   check nothing: do not use them as a permission check.
+   return zero rows. A few reads (`adm_folder_api.get_folder_id`, the storage-layer `adm_storage_api.get_file_content`)
+   check nothing: do not use them as a permission check. To read content, call `adm_document_api.get_content`, which does.
 2. **`system_login` skips every permission check.** It acts as `_UC_SYSTEM_` with the ADMIN role. For
    work done for a person use `system_user_login('JDOE')`. It upper-cases the name, raises
    `e_user_not_found` for an unknown user and `e_no_permission` for a deactivated one, and clears

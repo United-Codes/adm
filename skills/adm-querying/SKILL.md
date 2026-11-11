@@ -59,9 +59,9 @@ PDF version: `pdf_provenance`, `no_longer_pure_adm`, see `adm-pdf`).
    `retention_delete_date` are the document's **own** hold and retention. What really governs it, folder rules
    included, is `under_legal_hold`, `effective_retention_date`, `effective_retention_end_action` and the
    `*_system_flag` columns (see `adm-documents`).
-5. **`adm_storage_api.get_file_content` does not check access.** Any user can read any version id
-   they pass in. Take the `version_id` from `adm_my_documents_v.latest_version_id` or
-   `adm_my_document_versions_v`. Do not read `adm_document_versions.file_content`: it is empty for
+5. **To read file content use `adm_document_api.get_content`, which checks access.**
+   `adm_storage_api.get_file_content` does not: any user can read any version id they pass in. If you
+   call it, take the `version_id` from `adm_my_documents_v` or `adm_my_document_versions_v`. Do not read `adm_document_versions.file_content`: it is empty for
    object storage. Each read writes a `READ_DOCUMENT` row to the audit trail (once per user,
    document and request, none for `_UC_SYSTEM_`), and the row survives a rollback.
 6. **Do not rebuild access rules with joins.** Home folders, group folders, direct and inherited
@@ -180,7 +180,7 @@ select c.column_name, c.comments
 | --- | --- |
 | `adm_error.e_user_not_found` | `system_user_login` for a name that is not in `adm_users` |
 | `adm_error.e_no_permission` | `system_user_login` for a deactivated user |
-| `adm_error.e_version_not_found` | `get_file_content` for an unknown `p_version_id` |
+| `adm_error.e_version_not_found` | `adm_storage_api.get_file_content` for an unknown `p_version_id` |
 | `adm_error.e_admin_required` | `get_setting_value` of an `is_admin_only` key by a non-admin |
 | `ORA-12899` (not an ADM error) | `add_audit` with a `p_action_type` longer than 50 characters |
 

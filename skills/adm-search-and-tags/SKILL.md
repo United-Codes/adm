@@ -33,13 +33,18 @@ A tag (`adm_tags`) is a name. Attached to a document (`adm_document_tags`) it ca
    (images, video and archives are not), and a file in object storage only when the setting
    `OBJECT_STORAGE_INDEX` is `Y`. To catch up now, call `adm_job_automations_api.indexing_job` as an
    administrator (recipe 4).
-4. **`search_documents` has no permission filter.** It returns every match in the instance. Behind
-   a user-facing page use `search_user_documents`. Both skip trashed and archived documents and
-   documents in a trashed folder.
+4. **`search_documents` filters by the ADM context and takes no username.** An ADMIN context
+   (including `system_login`) finds every active document. Any other role (EDIT, VIEW, embed or share
+   link session) finds only what `search_user_documents` finds for the context user: owned and shared
+   documents, from the cached share list (see 5). With no context it returns no rows. For a page that
+   should show an administrator only their own documents use `search_user_documents`. Both skip trashed
+   and archived documents and documents in a trashed folder.
 5. **`search_user_documents` needs `p_username`** (null raises `e_missing_param`; case does not
-   matter; an unknown name finds nothing). Search is personal: an `ADMIN` user finds only what they own
-   or what was shared with them, like everyone else. Only the system user finds every active document:
-   under `system_login` pass `sys_context('ADM_CONTEXT', 'ADM_USERNAME')` (it is not in
+   matter; an unknown name finds nothing). Pass the context user,
+   `sys_context('ADM_CONTEXT', 'ADM_USERNAME')`. Another user's name raises `e_no_permission` unless the
+   context holds the ADMIN role, and so does a session without a context. Search is personal: an `ADMIN`
+   user finds only what they own or what was shared with them, like everyone else. Only the system
+   user finds every active document: under `system_login` pass the context user (it is not in
    `adm_users`). Passing `_UC_SYSTEM_` from another session finds nothing. The access
    list comes from a cache: a share on a **folder** appears only after
    `adm_cache_api.update_subshared_files_cache(p_username => ...)` or the next cache refresh (nightly,
@@ -156,7 +161,7 @@ select count(*) from adm_indexing_queue where index_status = 'PENDING';   -- rep
 | --- | --- |
 | `adm_error.e_missing_param` | `search_user_documents` with a null `p_username`; `create_tag` with a blank name |
 | `adm_error.e_doc_not_found` | tagging a trashed or unknown document |
-| `adm_error.e_no_permission` | tagging a document without EDIT rights; creating a new tag as non-admin while `USERS_CAN_CREATE_TAGS` is `N` |
+| `adm_error.e_no_permission` | `search_user_documents` with another user's name unless the context is ADMIN, or with no context; tagging a document without EDIT rights; creating a new tag as non-admin while `USERS_CAN_CREATE_TAGS` is `N` |
 | `adm_error.e_tag_not_found` | `remove_document_tag` or a `document_tag_id` call for an unknown tag |
 | `adm_error.e_tag_not_assigned` | `remove_document_tag` or `update_document_tag_value` by name, tag not on the document |
 | `adm_error.e_tag_ambiguous` | a by-name update of a tag that the document carries twice |
